@@ -34,6 +34,7 @@ module.exports = defineConfig({
               mode: process.env.PHONEPE_MODE, // "uat" or "prod"
               redirectUrl: process.env.PHONEPE_REDIRECT_URL,
               callbackUrl: process.env.PHONEPE_CALLBACK_URL,
+              redirectMode: "POST", // "POST" or "GET" (default: POST)
             },
           },
         ],
@@ -41,6 +42,11 @@ module.exports = defineConfig({
     },
   ],
 })
+
+## Webhooks
+To handle asynchronous payment updates (like when a user closes the browser after payment), configure the `callbackUrl` and ensure your Medusa server can receive POST requests at that URL.
+The provider implementation verifies the `X-VERIFY` signature from PhonePe.
+
 ```
 
 ## Environment Variables
