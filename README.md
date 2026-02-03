@@ -8,7 +8,12 @@ This is a PhonePe payment provider module for Medusa v2.
 yarn add medusa-payment-phonepe
 ```
 
+
+> [!NOTE]
+> This package depends on the official PhonePe Node.js SDK which is installed from a custom repository URL. Ensure your environment allows installing packages from `phonepe.mycloudrepo.io`.
+
 (Or link it locally if developing)
+
 
 ## Configuration
 

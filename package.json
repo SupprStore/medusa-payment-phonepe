@@ -22,7 +22,8 @@
         "@medusajs/framework": "^2.12.3",
         "@medusajs/medusa": "^2.0.0",
         "@medusajs/utils": "^2.12.3",
-        "axios": "^1.6.0"
+        "axios": "^1.6.0",
+        "pg-sdk-node": "https://phonepe.mycloudrepo.io/public/repositories/phonepe-pg-sdk-node/releases/v2/phonepe-pg-sdk-node-2.0.3.tgz"
     },
     "devDependencies": {
         "@medusajs/types": "^2.12.3",
