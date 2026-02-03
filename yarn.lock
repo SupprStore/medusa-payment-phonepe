@@ -2244,7 +2244,14 @@
   resolved "https://registry.npmjs.org/@medusajs/translation/-/translation-2.12.4.tgz"
   integrity sha512-mIrMaSZtTc6K/XdFaopMz7ycR5Y4xNlEJ8b6AbuCO3D+N3Odxh35Xw1xNmPumSIOZmLxDlRdDlyOKzf7ue5FfA==
 
-"@medusajs/types@^2.12.3", "@medusajs/types@2.12.4":
+"@medusajs/types@^2.13.1":
+  version "2.13.1"
+  resolved "https://registry.npmjs.org/@medusajs/types/-/types-2.13.1.tgz"
+  integrity sha512-Yw5AwVnwV+OdaOSTUhuwo14uKmqUp4qeuUzzo7HxxtrGCUcxGq2WkrjPY3z2fDTWKrSPIFqFaAJ0hMuUMt1ocw==
+  dependencies:
+    bignumber.js "^9.1.2"
+
+"@medusajs/types@2.12.4":
   version "2.12.4"
   resolved "https://registry.npmjs.org/@medusajs/types/-/types-2.12.4.tgz"
   integrity sha512-BTA315a3yZl6o0j9i0y0YpEM+xKY7B9BvDU60xQ0b4eCghl3xmpyAtdDBSj+jdxuafRXs6m0tJCfybYC8/Ldzw==

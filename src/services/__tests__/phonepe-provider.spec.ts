@@ -39,11 +39,6 @@ describe("PhonePeProvider", () => {
             amount: jest.fn().mockReturnThis(),
             redirectUrl: jest.fn().mockReturnThis(),
             message: jest.fn().mockReturnThis(),
-            mobileNumber: jest.fn().mockReturnThis(),
-            callbackUrl: jest.fn().mockReturnThis(),
-            merchantId: jest.fn().mockReturnThis(),
-            merchantUserId: jest.fn().mockReturnThis(),
-            redirectMode: jest.fn().mockReturnThis(),
             build: jest.fn().mockReturnValue({}),
         });
 
@@ -52,9 +47,6 @@ describe("PhonePeProvider", () => {
             merchantRefundId: jest.fn().mockReturnThis(),
             amount: jest.fn().mockReturnThis(),
             originalMerchantOrderId: jest.fn().mockReturnThis(),
-            merchantId: jest.fn().mockReturnThis(),
-            merchantUserId: jest.fn().mockReturnThis(),
-            callbackUrl: jest.fn().mockReturnThis(),
             build: jest.fn().mockReturnValue({}),
         });
 
