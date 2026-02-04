@@ -176,7 +176,7 @@ describe("PhonePeProvider", () => {
             const result = await provider.getWebhookActionAndData(payload as any)
 
             expect(result).toEqual({ action: "failed" })
-            expect(container.logger.error).toHaveBeenCalledWith("PhonePe Webhook: Invalid Signature")
+            expect(container.logger.error).toHaveBeenCalledWith("PhonePe Webhook: Verification Failed or Payment Failed")
         })
 
         it("should return failed action for payment error code", async () => {

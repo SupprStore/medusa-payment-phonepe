@@ -7,67 +7,37 @@ import {
     ProviderWebhookPayload,
     WebhookActionResult
 } from "@medusajs/types"
-import {
-    StandardCheckoutClient,
-    StandardCheckoutPayRequest,
-    RefundRequest,
-    Env
-} from "pg-sdk-node"
-import * as crypto from "crypto"
 import { PhonePeOptions } from "../types"
+import { PhonePeClientWrapper } from "./phonepe-client-wrapper"
+import { PaymentOperations } from "./operations/payment-operations"
+import { RefundOperations } from "./operations/refund-operations"
+import { WebhookValidator } from "./validators/webhook-validator"
 
 export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
     static identifier = "phonepe"
     protected options_: PhonePeOptions
     protected logger_: Logger
-    protected client_: StandardCheckoutClient
+    protected clientWrapper_: PhonePeClientWrapper
+    protected paymentOperations_: PaymentOperations
+    protected refundOperations_: RefundOperations
+    protected webhookValidator_: WebhookValidator
 
     constructor(container: { logger: Logger }, options: PhonePeOptions) {
         super(container, options)
         this.options_ = options
         this.logger_ = container.logger
 
-        const env = this.options_.mode === "prod" ? Env.PRODUCTION : Env.SANDBOX
-        const clientVersion = parseInt(this.options_.saltIndex || "1", 10)
-
-        // Initialize PhonePe SDK Client
-        this.client_ = StandardCheckoutClient.getInstance(
-            this.options_.merchantId,
-            this.options_.saltKey,
-            clientVersion,
-            env,
-            true // shouldPublishEvents
-        )
+        // Initialize Services
+        this.clientWrapper_ = new PhonePeClientWrapper(this.options_)
+        this.paymentOperations_ = new PaymentOperations(this.clientWrapper_, this.options_)
+        this.refundOperations_ = new RefundOperations(this.clientWrapper_)
+        this.webhookValidator_ = new WebhookValidator(this.options_)
     }
 
     async initiatePayment(input: any): Promise<any> {
-        const { amount, currency_code, context } = input
-
-        const merchantTransactionId = context?.payment_session_data?.merchantTransactionId || `MT${Date.now()}`
-        // PhonePe expects amount in paise (integers)
-        const phonePeAmount = Math.round(amount)
-
-        const callbackUrl = this.options_.callbackUrl || `${context.context?.origin || ""}/phonepe/callback`
-        const redirectUrl = this.options_.redirectUrl || callbackUrl
-
+        const callbackUrl = this.options_.callbackUrl || `${input.context?.context?.origin || ""}/phonepe/callback`
         try {
-            const requestBuilder = StandardCheckoutPayRequest.builder()
-                .merchantOrderId(merchantTransactionId)
-                .amount(phonePeAmount)
-                .redirectUrl(redirectUrl)
-                .message("Payment for Order")
-
-            // Mobile number and merchantUserId are not directly exposed in StandardCheckoutPayRequest v2 builder
-            // They might be needed for specific flows but Standard Checkout usually collects info on the page.
-
-            const payload = requestBuilder.build()
-            const response = await this.client_.pay(payload)
-
-            return {
-                id: merchantTransactionId, // Medusa needs an ID
-                redirectUrl: response.redirectUrl,
-                merchantTransactionId
-            }
+            return await this.paymentOperations_.initiatePayment(input, callbackUrl)
         } catch (error: any) {
             this.logger_.error(`PhonePe initiation failed: ${error.message}`)
             throw error
@@ -75,46 +45,7 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
     }
 
     async authorizePayment(input: any): Promise<any> {
-        const paymentSessionData = input
-        const merchantTransactionId = paymentSessionData.merchantTransactionId as string
-
-        try {
-            const statusResponse = await this.client_.getOrderStatus(merchantTransactionId)
-
-            // Check state instead of code
-            if (statusResponse.state === "COMPLETED") {
-                return {
-                    status: PaymentSessionStatus.AUTHORIZED,
-                    data: {
-                        ...paymentSessionData,
-                        paymentId: statusResponse.orderId || statusResponse.merchantOrderId
-                    }
-                }
-            }
-
-            if (statusResponse.state === "PENDING" || statusResponse.state === "On Progress") { // Checking potential pending states
-                return {
-                    status: PaymentSessionStatus.PENDING,
-                    data: paymentSessionData
-                }
-            }
-
-            return {
-                status: PaymentSessionStatus.ERROR,
-                data: {
-                    ...paymentSessionData,
-                    error: statusResponse.state || "Payment failed"
-                }
-            }
-        } catch (error: any) {
-            return {
-                status: PaymentSessionStatus.ERROR,
-                data: {
-                    ...paymentSessionData,
-                    error: error.message
-                }
-            }
-        }
+        return await this.paymentOperations_.authorizePayment(input)
     }
 
     async cancelPayment(input: any): Promise<any> {
@@ -130,31 +61,8 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
     }
 
     async refundPayment(input: any): Promise<any> {
-        const paymentSessionData = input.data || input
-        const refundAmount = input.amount
-        const amount = Math.round(refundAmount)
-
-        const merchantTransactionId = `REF-${Date.now()}`
-        const originalTransactionId = paymentSessionData.merchantTransactionId as string
-
         try {
-            const refundBuilder = RefundRequest.builder()
-                .merchantRefundId(merchantTransactionId)
-                .amount(amount)
-                .originalMerchantOrderId(originalTransactionId)
-
-            const response = await this.client_.refund(refundBuilder.build())
-
-            if (response.state === "COMPLETED" || response.state === "SUCCESS" || response.state === "PAYMENT_SUCCESS") {
-                return {
-                    ...paymentSessionData,
-                    refundParams: response
-                }
-            } else {
-                // Even if not completed, we might return data for tracking?
-                // But Medusa expects success. 
-                throw new Error(`Refund state: ${response.state}`)
-            }
+            return await this.refundOperations_.refundPayment(input)
         } catch (error: any) {
             this.logger_.error(`PhonePe Refund Error: ${error.message}`)
             throw error
@@ -162,21 +70,7 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
     }
 
     async getPaymentStatus(input: any): Promise<any> {
-        const paymentSessionData = input
-        const merchantTransactionId = paymentSessionData.merchantTransactionId as string
-
-        try {
-            const statusResponse = await this.client_.getOrderStatus(merchantTransactionId)
-            if (statusResponse.state === "COMPLETED") {
-                return { status: PaymentSessionStatus.AUTHORIZED }
-            }
-            if (statusResponse.state === "PENDING") {
-                return { status: PaymentSessionStatus.PENDING }
-            }
-            return { status: PaymentSessionStatus.ERROR }
-        } catch (e) {
-            return { status: PaymentSessionStatus.ERROR }
-        }
+        return await this.paymentOperations_.getPaymentStatus(input)
     }
 
     async deletePayment(input: any): Promise<any> {
@@ -194,66 +88,15 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
     async getWebhookActionAndData(
         payload: ProviderWebhookPayload["payload"]
     ): Promise<WebhookActionResult> {
-        const { data, headers } = payload
-
-        // 1. Verify Signature
-        const xVerify = headers["x-verify"]
-        if (!xVerify) {
-            return { action: "not_supported" }
-        }
-
-        const { response } = data as { response: string }
-
-        if (!response) {
-            return { action: "not_supported" }
-        }
-
-        const saltKey = this.options_.saltKey
-        const saltIndex = this.options_.saltIndex || "1"
-
-        // Checksum = SHA256(response + saltKey) + ### + saltIndex
-        const generatedSignature = crypto
-            .createHash("sha256")
-            .update(response + saltKey)
-            .digest("hex") + "###" + saltIndex
-
-        if (generatedSignature !== xVerify) {
-            this.logger_.error("PhonePe Webhook: Invalid Signature")
-            return { action: "failed" }
-        }
-
-        // 2. Decode Payload
         try {
-            const buffer = Buffer.from(response, "base64")
-            const decodedBody = JSON.parse(buffer.toString("utf-8"))
-
-            const { code, data: paymentData } = decodedBody
-            const merchantTransactionId = paymentData.merchantTransactionId
-
-            if (code === "PAYMENT_SUCCESS") {
-                // Return 'authorized' so Medusa completes the cart
-                return {
-                    action: "authorized",
-                    data: {
-                        session_id: merchantTransactionId,
-                        amount: paymentData.amount, // Payment amount in instrument currency
-                    },
-                }
-            } else if (code === "PAYMENT_ERROR" || code === "PAYMENT_DECLINED") {
-                return {
-                    action: "failed",
-                    data: {
-                        session_id: merchantTransactionId,
-                        amount: paymentData.amount || 0,
-                    }
-                }
+            const result = await this.webhookValidator_.getWebhookActionAndData(payload)
+            if (result.action === "failed") {
+                this.logger_.error("PhonePe Webhook: Verification Failed or Payment Failed")
             }
-        } catch (e) {
-            this.logger_.error(`PhonePe Webhook Error: ${(e as Error).message}`)
-        }
-
-        return {
-            action: "not_supported",
+            return result
+        } catch (e: any) {
+            this.logger_.error(`PhonePe Webhook Error: ${e.message}`)
+            return { action: "not_supported" }
         }
     }
 }
