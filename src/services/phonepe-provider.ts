@@ -13,6 +13,7 @@ import {
     RefundRequest,
     Env
 } from "pg-sdk-node"
+import * as crypto from "crypto"
 import { PhonePeOptions } from "../types"
 
 export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
@@ -191,18 +192,66 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
     }
 
     async getWebhookActionAndData(
-        data: ProviderWebhookPayload["payload"]
+        payload: ProviderWebhookPayload["payload"]
     ): Promise<WebhookActionResult> {
-        // For SDK webhook validation, we need username/password/authorization header.
-        // These might be passed in headers, but Medusa core webhook handling 
-        // usually passes the body in `data`. Accessing headers might require 
-        // `data.headers` if the raw event structure is preserved by the event bus 
-        // or if `ProviderWebhookPayload` includes it. 
-        //
-        // NOTE: The SDK `validateCallback` requires username/password which 
-        // are set in the dashboard. We should probably add them to options if needed.
-        // For now, returning not_supported as the SDK migration focus is on 
-        // Core Payment Flow.
+        const { data, headers } = payload
+
+        // 1. Verify Signature
+        const xVerify = headers["x-verify"]
+        if (!xVerify) {
+            return { action: "not_supported" }
+        }
+
+        const { response } = data as { response: string }
+
+        if (!response) {
+            return { action: "not_supported" }
+        }
+
+        const saltKey = this.options_.saltKey
+        const saltIndex = this.options_.saltIndex || "1"
+
+        // Checksum = SHA256(response + saltKey) + ### + saltIndex
+        const generatedSignature = crypto
+            .createHash("sha256")
+            .update(response + saltKey)
+            .digest("hex") + "###" + saltIndex
+
+        if (generatedSignature !== xVerify) {
+            this.logger_.error("PhonePe Webhook: Invalid Signature")
+            return { action: "failed" }
+        }
+
+        // 2. Decode Payload
+        try {
+            const buffer = Buffer.from(response, "base64")
+            const decodedBody = JSON.parse(buffer.toString("utf-8"))
+
+            const { code, data: paymentData } = decodedBody
+            const merchantTransactionId = paymentData.merchantTransactionId
+
+            if (code === "PAYMENT_SUCCESS") {
+                // Return 'authorized' so Medusa completes the cart
+                return {
+                    action: "authorized",
+                    data: {
+                        session_id: merchantTransactionId,
+                        amount: paymentData.amount, // Payment amount in instrument currency
+                    },
+                }
+            } else if (code === "PAYMENT_ERROR" || code === "PAYMENT_DECLINED") {
+                return {
+                    action: "failed",
+                    data: {
+                        session_id: merchantTransactionId,
+                        amount: paymentData.amount || 0,
+                    }
+                }
+            }
+        } catch (e) {
+            this.logger_.error(`PhonePe Webhook Error: ${(e as Error).message}`)
+        }
+
         return {
             action: "not_supported",
         }

@@ -1,5 +1,6 @@
 import { PhonePeProvider } from "../phonepe-provider"
 import { StandardCheckoutClient, StandardCheckoutPayRequest, RefundRequest } from "pg-sdk-node"
+import * as crypto from "crypto"
 
 jest.mock("pg-sdk-node")
 
@@ -122,6 +123,81 @@ describe("PhonePeProvider", () => {
 
             expect(mockClient.refund).toHaveBeenCalled()
             expect(result.refundParams.state).toBe("COMPLETED")
+        })
+    })
+
+    describe("getWebhookActionAndData", () => {
+        const validBody = {
+            code: "PAYMENT_SUCCESS",
+            data: {
+                merchantTransactionId: "MT123",
+                amount: 1000
+            }
+        }
+        const encodedBody = Buffer.from(JSON.stringify(validBody)).toString("base64")
+        const saltKey = "test-salt-key"
+        const saltIndex = "1"
+        const validSignature = crypto.createHash("sha256").update(encodedBody + saltKey).digest("hex") + "###" + saltIndex
+
+        it("should return authorized action for successful payment with valid signature", async () => {
+            const payload = {
+                data: { response: encodedBody },
+                headers: { "x-verify": validSignature }
+            }
+
+            const result = await provider.getWebhookActionAndData(payload as any)
+
+            expect(result).toEqual({
+                action: "authorized",
+                data: {
+                    session_id: "MT123",
+                    amount: 1000
+                }
+            })
+        })
+
+        it("should return not_supported if signature is missing", async () => {
+            const payload = {
+                data: { response: encodedBody },
+                headers: {}
+            }
+
+            const result = await provider.getWebhookActionAndData(payload as any)
+
+            expect(result).toEqual({ action: "not_supported" })
+        })
+
+        it("should return failed action for invalid signature", async () => {
+            const payload = {
+                data: { response: encodedBody },
+                headers: { "x-verify": "invalid-signature" }
+            }
+
+            const result = await provider.getWebhookActionAndData(payload as any)
+
+            expect(result).toEqual({ action: "failed" })
+            expect(container.logger.error).toHaveBeenCalledWith("PhonePe Webhook: Invalid Signature")
+        })
+
+        it("should return failed action for payment error code", async () => {
+            const errorBody = {
+                code: "PAYMENT_ERROR",
+                data: { merchantTransactionId: "MT123" }
+            }
+            const encodedError = Buffer.from(JSON.stringify(errorBody)).toString("base64")
+            const signature = crypto.createHash("sha256").update(encodedError + saltKey).digest("hex") + "###" + saltIndex
+
+            const payload = {
+                data: { response: encodedError },
+                headers: { "x-verify": signature }
+            }
+
+            const result = await provider.getWebhookActionAndData(payload as any)
+
+            expect(result).toEqual({
+                action: "failed",
+                data: { session_id: "MT123", amount: 0 }
+            })
         })
     })
 })
