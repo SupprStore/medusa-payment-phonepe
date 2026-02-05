@@ -3,6 +3,24 @@ import {
 } from "@medusajs/framework/utils"
 import {
     Logger,
+    InitiatePaymentInput,
+    InitiatePaymentOutput,
+    AuthorizePaymentInput,
+    AuthorizePaymentOutput,
+    CancelPaymentInput,
+    CancelPaymentOutput,
+    CapturePaymentInput,
+    CapturePaymentOutput,
+    RefundPaymentInput,
+    RefundPaymentOutput,
+    GetPaymentStatusInput,
+    GetPaymentStatusOutput,
+    DeletePaymentInput,
+    DeletePaymentOutput,
+    RetrievePaymentInput,
+    RetrievePaymentOutput,
+    UpdatePaymentInput,
+    UpdatePaymentOutput,
     ProviderWebhookPayload,
     WebhookActionResult
 } from "@medusajs/types"
@@ -10,6 +28,7 @@ import { PhonePeOptions } from "../types"
 import { PhonePeClientWrapper } from "./phonepe-client-wrapper"
 import { PaymentOperations } from "./operations/payment-operations"
 import { RefundOperations } from "./operations/refund-operations"
+import { ReconciliationOperations } from "./operations/reconciliation-operations"
 import { WebhookValidator } from "./validators/webhook-validator"
 
 export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
@@ -19,6 +38,7 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
     protected clientWrapper_: PhonePeClientWrapper
     protected paymentOperations_: PaymentOperations
     protected refundOperations_: RefundOperations
+    protected reconciliationOperations_: ReconciliationOperations
     protected webhookValidator_: WebhookValidator
 
     constructor(container: { logger: Logger }, options: PhonePeOptions) {
@@ -30,6 +50,7 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
         this.clientWrapper_ = new PhonePeClientWrapper(this.options_)
         this.paymentOperations_ = new PaymentOperations(this.clientWrapper_, this.options_)
         this.refundOperations_ = new RefundOperations(this.clientWrapper_)
+        this.reconciliationOperations_ = new ReconciliationOperations(this.clientWrapper_)
         this.webhookValidator_ = new WebhookValidator(this.options_, this.clientWrapper_)
 
         if (!this.options_.clientId && this.options_.merchantId) {
@@ -37,8 +58,9 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
         }
     }
 
-    async initiatePayment(input: any): Promise<any> {
-        const callbackUrl = this.options_.callbackUrl || `${input.context?.context?.origin || ""}/phonepe/callback`
+    async initiatePayment(input: InitiatePaymentInput): Promise<InitiatePaymentOutput> {
+        const origin = (input as any)?.context?.context?.origin || ""
+        const callbackUrl = this.options_.callbackUrl || `${origin}/phonepe/callback`
         try {
             return await this.paymentOperations_.initiatePayment(input, callbackUrl)
         } catch (error: any) {
@@ -48,8 +70,9 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
     }
 
     // Not part of the Medusa payment provider interface, but exposed for mobile SDK flows.
-    async createSdkOrder(input: any): Promise<any> {
-        const callbackUrl = this.options_.callbackUrl || `${input.context?.context?.origin || ""}/phonepe/callback`
+    async createSdkOrder(input: InitiatePaymentInput): Promise<any> {
+        const origin = (input as any)?.context?.context?.origin || ""
+        const callbackUrl = this.options_.callbackUrl || `${origin}/phonepe/callback`
         try {
             return await this.paymentOperations_.createSdkOrder(input, callbackUrl)
         } catch (error: any) {
@@ -58,22 +81,22 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
         }
     }
 
-    async authorizePayment(input: any): Promise<any> {
+    async authorizePayment(input: AuthorizePaymentInput): Promise<AuthorizePaymentOutput> {
         return await this.paymentOperations_.authorizePayment(input)
     }
 
-    async cancelPayment(input: any): Promise<any> {
+    async cancelPayment(input: CancelPaymentInput): Promise<CancelPaymentOutput> {
         this.logger_.warn("PhonePe does not support canceling payments via API. Returning current data.")
         return { data: input?.data ?? {} }
     }
 
-    async capturePayment(input: any): Promise<any> {
+    async capturePayment(input: CapturePaymentInput): Promise<CapturePaymentOutput> {
         // PhonePe 'pay' is usually auto-captured.
         this.logger_.info("PhonePe captures payments automatically. Returning current data.")
         return { data: input?.data ?? {} }
     }
 
-    async refundPayment(input: any): Promise<any> {
+    async refundPayment(input: RefundPaymentInput): Promise<RefundPaymentOutput> {
         try {
             return await this.refundOperations_.refundPayment(input)
         } catch (error: any) {
@@ -88,19 +111,19 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
         return { data: { refundStatus: status } }
     }
 
-    async getPaymentStatus(input: any): Promise<any> {
+    async getPaymentStatus(input: GetPaymentStatusInput): Promise<GetPaymentStatusOutput> {
         return await this.paymentOperations_.getPaymentStatus(input)
     }
 
-    async deletePayment(input: any): Promise<any> {
+    async deletePayment(input: DeletePaymentInput): Promise<DeletePaymentOutput> {
         return await this.cancelPayment(input)
     }
 
-    async retrievePayment(input: any): Promise<any> {
+    async retrievePayment(input: RetrievePaymentInput): Promise<RetrievePaymentOutput> {
         return await this.paymentOperations_.retrievePayment(input)
     }
 
-    async updatePayment(input: any): Promise<any> {
+    async updatePayment(input: UpdatePaymentInput): Promise<UpdatePaymentOutput> {
         if (input?.data?.merchantOrderId || input?.data?.id) {
             return { data: input.data }
         }
@@ -125,5 +148,14 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
             this.logger_.error(`PhonePe Webhook Error: ${e.message}`)
             return { action: "not_supported" }
         }
+    }
+
+    // Reconciliation helpers (not part of Medusa provider interface)
+    async reconcilePayments(merchantOrderIds: string[]) {
+        return this.reconciliationOperations_.reconcilePayments(merchantOrderIds)
+    }
+
+    async reconcileRefunds(refundIds: string[]) {
+        return this.reconciliationOperations_.reconcileRefunds(refundIds)
     }
 }

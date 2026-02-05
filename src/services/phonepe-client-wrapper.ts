@@ -1,5 +1,6 @@
 import { Env, PhonePeException, ServerError, StandardCheckoutClient, TooManyRequests } from "pg-sdk-node"
 import { PhonePeOptions } from "../types"
+import { MedusaError } from "@medusajs/framework/utils"
 
 export class PhonePeClientWrapper {
     private static sharedClient?: StandardCheckoutClient
@@ -126,7 +127,10 @@ export class PhonePeClientWrapper {
 
     private normalizeError(error: any): Error {
         if (error instanceof PhonePeException) {
-            const normalized = new Error(error.message)
+            const normalized = new MedusaError(
+                this.getMedusaErrorType(error),
+                error.message
+            )
             normalized.stack = error.stack
             ;(normalized as any).phonepe = {
                 type: error.type,
@@ -138,5 +142,16 @@ export class PhonePeClientWrapper {
         }
 
         return error
+    }
+
+    private getMedusaErrorType(error: PhonePeException) {
+        const status = error.httpStatusCode || 0
+        if (status === 400) return MedusaError.Types.INVALID_DATA
+        if (status === 401 || status === 403) return MedusaError.Types.UNAUTHORIZED
+        if (status === 404) return MedusaError.Types.NOT_FOUND
+        if (status === 409) return MedusaError.Types.CONFLICT
+        if (status === 429) return MedusaError.Types.NOT_ALLOWED
+        if (status >= 500) return MedusaError.Types.UNEXPECTED_STATE
+        return MedusaError.Types.UNEXPECTED_STATE
     }
 }

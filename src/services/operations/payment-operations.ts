@@ -177,7 +177,10 @@ export class PaymentOperations {
         const udf4 = data?.session_id || data?.id
         const udf5 = data?.cart_id || input?.context?.idempotency_key
 
-        const values = [udf1, udf2, udf3, udf4, udf5].filter((value) => value)
+        const fallbackMobile = data?.mobile_number
+        const fallbackDevice = data?.device_id || data?.device_os || data?.app_version
+
+        const values = [udf1, udf2, udf3, udf4, udf5, fallbackMobile, fallbackDevice].filter((value) => value)
         if (values.length === 0) {
             return undefined
         }
@@ -188,6 +191,9 @@ export class PaymentOperations {
         if (udf3) builder.udf3(String(udf3))
         if (udf4) builder.udf4(String(udf4))
         if (udf5) builder.udf5(String(udf5))
+
+        if (!udf3 && fallbackMobile) builder.udf3(String(fallbackMobile))
+        if (!udf4 && fallbackDevice) builder.udf4(String(fallbackDevice))
 
         return builder.build()
     }

@@ -31,6 +31,7 @@ describe("PhonePeProvider", () => {
         pay: jest.fn(),
         refund: jest.fn(),
         getOrderStatus: jest.fn(),
+        getRefundStatus: jest.fn(),
         validateCallback: jest.fn(),
         createSdkOrder: jest.fn(),
     }
@@ -96,7 +97,7 @@ describe("PhonePeProvider", () => {
                 currency_code: "INR",
                 context: {
                     payment_session_data: { merchantTransactionId: "MT123" },
-                    customer: { id: "cust_123" }
+                    customer: { id: "cust_123", email: "test@example.com" }
                 }
             }
 
@@ -141,7 +142,7 @@ describe("PhonePeProvider", () => {
             const result = await provider.authorizePayment({ data: { merchantOrderId: "MT123" } })
 
             expect(result.status).toBe("authorized")
-            expect(result.data.paymentId).toBe("PG123")
+            expect((result.data as any).paymentId).toBe("PG123")
         })
 
         it("should return pending status when payment is pending", async () => {
@@ -172,7 +173,7 @@ describe("PhonePeProvider", () => {
             const result = await provider.refundPayment(input)
 
             expect(mockClient.refund).toHaveBeenCalled()
-            expect(result.data.refundResponse.state).toBe("COMPLETED")
+            expect(((result.data as any).refundResponse as any).state).toBe("COMPLETED")
         })
     })
 
@@ -183,7 +184,7 @@ describe("PhonePeProvider", () => {
                 currency_code: "INR",
                 context: {
                     payment_session_data: { merchantTransactionId: "MT123" },
-                    customer: { id: "cust_123" }
+                    customer: { id: "cust_123", email: "test@example.com" }
                 }
             }
 
@@ -355,6 +356,50 @@ describe("PhonePeProvider", () => {
                 action: "failed",
                 data: { session_id: "MT123", amount: 0 }
             })
+        })
+    })
+
+    describe("reconciliation", () => {
+        it("should reconcile payments via getOrderStatus", async () => {
+            mockClient.getOrderStatus.mockResolvedValueOnce({
+                merchantOrderId: "MT111",
+                amount: 1000,
+                state: "COMPLETED",
+                orderId: "PG111"
+            })
+
+            const result = await provider.reconcilePayments(["MT111"])
+
+            expect(result).toEqual([
+                {
+                    merchantOrderId: "MT111",
+                    status: "authorized",
+                    state: "COMPLETED",
+                    amount: 1000,
+                    orderId: "PG111"
+                }
+            ])
+        })
+
+        it("should reconcile refunds via getRefundStatus", async () => {
+            mockClient.getRefundStatus.mockResolvedValueOnce({
+                merchantRefundId: "REF111",
+                originalMerchantOrderId: "MT111",
+                amount: 500,
+                state: "COMPLETED"
+            })
+
+            const result = await provider.reconcileRefunds(["REF111"])
+
+            expect(result).toEqual([
+                {
+                    refundId: "REF111",
+                    state: "COMPLETED",
+                    amount: 500,
+                    merchantRefundId: "REF111",
+                    originalMerchantOrderId: "MT111"
+                }
+            ])
         })
     })
 })

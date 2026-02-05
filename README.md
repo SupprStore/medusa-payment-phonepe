@@ -60,6 +60,11 @@ The provider validates callbacks using the SDK `validateCallback` method, which 
 ## Mobile SDK Order (Optional)
 For mobile SDK flows, this provider exposes a `createSdkOrder` method that returns the SDK order token inside `data.sdkOrder`.
 
+## Reconciliation Helpers
+If webhooks are missed, you can reconcile with:
+- `reconcilePayments(merchantOrderIds: string[])`
+- `reconcileRefunds(refundIds: string[])`
+
 ```
 
 ## Environment Variables
