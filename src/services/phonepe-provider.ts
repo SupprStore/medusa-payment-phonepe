@@ -68,6 +68,12 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
         }
     }
 
+    // Not part of the Medusa payment provider interface, but exposed for integrations that need refund reconciliation.
+    async getRefundStatus(refundId: string): Promise<any> {
+        const status = await this.refundOperations_.getRefundStatus(refundId)
+        return { data: { refundStatus: status } }
+    }
+
     async getPaymentStatus(input: any): Promise<any> {
         return await this.paymentOperations_.getPaymentStatus(input)
     }
