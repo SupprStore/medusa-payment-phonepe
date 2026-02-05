@@ -14,3 +14,4 @@ This roadmap has been split into focused documents for easier navigation.
 - [08-fallback-strategy.md](08-fallback-strategy.md)
 - [09-roadmap-phases.md](09-roadmap-phases.md)
 - [10-pre-pr-checks.md](10-pre-pr-checks.md)
+- [recent-development.md](recent-development.md)
