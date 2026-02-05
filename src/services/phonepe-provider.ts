@@ -1,6 +1,5 @@
 import {
-    AbstractPaymentProvider,
-    PaymentSessionStatus
+    AbstractPaymentProvider
 } from "@medusajs/framework/utils"
 import {
     Logger,
