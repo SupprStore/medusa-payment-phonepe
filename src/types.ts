@@ -20,4 +20,8 @@ export interface PhonePeOptions {
 
     // SDK client behavior
     shouldPublishEvents?: boolean
+
+    // Retry behavior for transient SDK failures
+    maxRetries?: number
+    retryDelayMs?: number
 }
