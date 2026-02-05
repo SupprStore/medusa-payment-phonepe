@@ -1,5 +1,5 @@
 import { BigNumber, MathBN, PaymentSessionStatus } from "@medusajs/framework/utils"
-import { MetaInfo, StandardCheckoutPayRequest } from "pg-sdk-node"
+import { CreateSdkOrderRequest, MetaInfo, StandardCheckoutPayRequest } from "pg-sdk-node"
 import { PhonePeOptions } from "../../types"
 import { PhonePeClientWrapper } from "../phonepe-client-wrapper"
 
@@ -114,6 +114,41 @@ export class PaymentOperations {
                 amount: statusResponse.amount,
                 orderId: statusResponse.orderId,
                 response: statusResponse,
+            }
+        }
+    }
+
+    async createSdkOrder(input: any, callbackUrl: string) {
+        const { amount, context, data, currency_code } = input
+        const merchantOrderId =
+            data?.merchantOrderId ||
+            context?.idempotency_key ||
+            context?.payment_session_data?.merchantTransactionId ||
+            `MT-${Date.now()}`
+
+        const phonePeAmount = this.getSmallestUnit(amount, currency_code || "INR")
+        if (phonePeAmount < 100) {
+            throw new Error("PhonePe amount must be at least 100 (in paise).")
+        }
+
+        const redirectUrl = this.options.redirectUrl || callbackUrl
+        const builder = CreateSdkOrderRequest.StandardCheckoutBuilder()
+            .merchantOrderId(merchantOrderId)
+            .amount(phonePeAmount)
+            .redirectUrl(redirectUrl)
+            .message("Payment for Order")
+
+        const metaInfo = this.buildMetaInfo(input)
+        if (metaInfo) {
+            builder.metaInfo(metaInfo)
+        }
+
+        const response = await this.clientWrapper.createSdkOrder(builder.build())
+        return {
+            id: merchantOrderId,
+            data: {
+                merchantOrderId,
+                sdkOrder: response
             }
         }
     }

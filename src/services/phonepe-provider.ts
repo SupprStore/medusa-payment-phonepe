@@ -44,6 +44,17 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
         }
     }
 
+    // Not part of the Medusa payment provider interface, but exposed for mobile SDK flows.
+    async createSdkOrder(input: any): Promise<any> {
+        const callbackUrl = this.options_.callbackUrl || `${input.context?.context?.origin || ""}/phonepe/callback`
+        try {
+            return await this.paymentOperations_.createSdkOrder(input, callbackUrl)
+        } catch (error: any) {
+            this.logger_.error(`PhonePe SDK order creation failed: ${error.message}`)
+            throw error
+        }
+    }
+
     async authorizePayment(input: any): Promise<any> {
         return await this.paymentOperations_.authorizePayment(input)
     }
