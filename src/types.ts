@@ -11,7 +11,6 @@ export interface PhonePeOptions {
 
     redirectUrl: string
     callbackUrl?: string
-    redirectMode?: "POST" | "GET"
     mode: "uat" | "prod"
 
     // Webhook callback auth (SDK validateCallback)

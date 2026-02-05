@@ -20,6 +20,8 @@ export class PaymentOperations {
             context?.payment_session_data?.merchantTransactionId ||
             `MT-${crypto.randomUUID()}`
 
+        this.assertAmount(amount)
+
         // PhonePe expects amount in paise (integers)
         const phonePeAmount = this.getSmallestUnit(amount, currency_code || "INR")
         if (phonePeAmount < 100) {
@@ -125,6 +127,8 @@ export class PaymentOperations {
             context?.payment_session_data?.merchantTransactionId ||
             `MT-${crypto.randomUUID()}`
 
+        this.assertAmount(amount)
+
         const phonePeAmount = this.getSmallestUnit(amount, currency_code || "INR")
         if (phonePeAmount < 100) {
             throw new Error("PhonePe amount must be at least 100 (in paise).")
@@ -153,10 +157,12 @@ export class PaymentOperations {
     private getMerchantOrderId(input: PhonePeOperationInput | PhonePePaymentData): string | undefined {
         const data = (input as PhonePeOperationInput).data
         const flat = input as PhonePePaymentData
+        if (data?.id && !data?.merchantOrderId) {
+            data.merchantOrderId = data.id
+        }
         return (
             flat?.merchantOrderId ||
             data?.merchantOrderId ||
-            data?.id ||
             flat?.merchantTransactionId ||
             data?.merchantTransactionId
         )
@@ -198,6 +204,17 @@ export class PaymentOperations {
 
         const [whole = "0"] = numeric.toString().split(".")
         return parseInt(whole, 10)
+    }
+
+    private assertAmount(amount: unknown) {
+        if (amount === undefined || amount === null) {
+            throw new Error("Missing amount.")
+        }
+
+        const numeric = new BigNumber(amount as any).numeric
+        if (!Number.isFinite(Number(numeric))) {
+            throw new Error("Invalid amount.")
+        }
     }
 
     private getCurrencyMultiplier(currency: string): number {

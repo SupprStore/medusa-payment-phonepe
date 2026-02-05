@@ -117,6 +117,17 @@ describe("PhonePeProvider", () => {
                 }
             })
         })
+
+        it("should throw when amount is missing", async () => {
+            const input = {
+                currency_code: "INR",
+                context: {
+                    payment_session_data: { merchantTransactionId: "MT123" }
+                }
+            }
+
+            await expect(provider.initiatePayment(input as any)).rejects.toThrow("Missing amount.")
+        })
     })
 
     describe("authorizePayment", () => {
@@ -247,6 +258,59 @@ describe("PhonePeProvider", () => {
                 action: "authorized",
                 data: { session_id: "MT456", amount: 2000 }
             })
+        })
+
+        it("should return not_supported when auth header exists without credentials", async () => {
+            const payload = {
+                data: { any: "payload" },
+                rawData: JSON.stringify({}),
+                headers: { authorization: "Basic abc123" }
+            }
+
+            const result = await provider.getWebhookActionAndData(payload as any)
+
+            expect(result).toEqual({ action: "not_supported" })
+        })
+
+        it("should return not_supported when rawData is missing for SDK validation", async () => {
+            const payload = {
+                data: { any: "payload" },
+                headers: { authorization: "Basic abc123" }
+            }
+
+            const providerWithCallback = new PhonePeProvider(container, {
+                ...options,
+                callbackUsername: "cb-user",
+                callbackPassword: "cb-pass",
+            })
+
+            const result = await providerWithCallback.getWebhookActionAndData(payload as any)
+
+            expect(result).toEqual({ action: "not_supported" })
+        })
+
+        it("should return not_supported when API verification is indeterminate", async () => {
+            const payload = {
+                data: { any: "payload" },
+                rawData: JSON.stringify({}),
+                headers: { authorization: "Basic abc123" }
+            }
+
+            mockClient.validateCallback.mockReturnValue({
+                payload: { state: "COMPLETED", merchantOrderId: "MT789", amount: 3000 }
+            })
+
+            mockClient.getOrderStatus.mockRejectedValueOnce(new Error("timeout"))
+
+            const providerWithCallback = new PhonePeProvider(container, {
+                ...options,
+                callbackUsername: "cb-user",
+                callbackPassword: "cb-pass",
+            })
+
+            const result = await providerWithCallback.getWebhookActionAndData(payload as any)
+
+            expect(result).toEqual({ action: "not_supported" })
         })
 
         it("should return not_supported if signature is missing", async () => {

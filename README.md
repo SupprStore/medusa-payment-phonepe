@@ -45,7 +45,6 @@ module.exports = defineConfig({
               webhookVerifyWithApi: true,
               maxRetries: 2,
               retryDelayMs: 500,
-              redirectMode: "POST", // "POST" or "GET" (default: POST)
             },
           },
         ],
