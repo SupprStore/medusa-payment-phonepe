@@ -10,15 +10,19 @@ export class PaymentOperations {
     ) { }
 
     async initiatePayment(input: any, callbackUrl: string) {
-        const { amount, context } = input
+        const { amount, context, data } = input
+        const merchantOrderId =
+            data?.merchantOrderId ||
+            context?.idempotency_key ||
+            context?.payment_session_data?.merchantTransactionId ||
+            `MT-${Date.now()}`
 
-        const merchantTransactionId = context?.payment_session_data?.merchantTransactionId || `MT${Date.now()}`
         // PhonePe expects amount in paise (integers)
-        const phonePeAmount = Math.round(amount)
+        const phonePeAmount = Math.round(Number(amount))
         const redirectUrl = this.options.redirectUrl || callbackUrl
 
         const requestBuilder = StandardCheckoutPayRequest.builder()
-            .merchantOrderId(merchantTransactionId)
+            .merchantOrderId(merchantOrderId)
             .amount(phonePeAmount)
             .redirectUrl(redirectUrl)
             .message("Payment for Order")
@@ -27,40 +31,38 @@ export class PaymentOperations {
         const response = await this.clientWrapper.pay(payload)
 
         return {
-            id: merchantTransactionId, // Medusa needs an ID
-            redirectUrl: response.redirectUrl,
-            merchantTransactionId
+            id: merchantOrderId, // Medusa needs an ID
+            data: {
+                merchantOrderId,
+                redirectUrl: response.redirectUrl,
+            }
         }
     }
 
     async authorizePayment(paymentSessionData: any) {
-        const merchantTransactionId = paymentSessionData.merchantTransactionId as string
+        const merchantOrderId = this.getMerchantOrderId(paymentSessionData)
 
         try {
-            const statusResponse = await this.clientWrapper.getOrderStatus(merchantTransactionId)
-
-            if (statusResponse.state === "COMPLETED") {
+            if (!merchantOrderId) {
                 return {
-                    status: PaymentSessionStatus.AUTHORIZED,
+                    status: PaymentSessionStatus.ERROR,
                     data: {
                         ...paymentSessionData,
-                        paymentId: statusResponse.orderId || statusResponse.merchantOrderId
+                        error: "Missing merchantOrderId for authorization"
                     }
                 }
             }
 
-            if (statusResponse.state === "PENDING" || statusResponse.state === "On Progress") {
-                return {
-                    status: PaymentSessionStatus.PENDING,
-                    data: paymentSessionData
-                }
-            }
+            const statusResponse = await this.clientWrapper.getOrderStatus(merchantOrderId)
+            const status = this.mapOrderStatus(statusResponse.state)
 
             return {
-                status: PaymentSessionStatus.ERROR,
+                status,
                 data: {
                     ...paymentSessionData,
-                    error: statusResponse.state || "Payment failed"
+                    merchantOrderId,
+                    paymentId: statusResponse.orderId || statusResponse.merchantOrderId,
+                    state: statusResponse.state,
                 }
             }
         } catch (error: any) {
@@ -75,19 +77,64 @@ export class PaymentOperations {
     }
 
     async getPaymentStatus(paymentSessionData: any) {
-        const merchantTransactionId = paymentSessionData.merchantTransactionId as string
+        const merchantOrderId = this.getMerchantOrderId(paymentSessionData)
 
         try {
-            const statusResponse = await this.clientWrapper.getOrderStatus(merchantTransactionId)
-            if (statusResponse.state === "COMPLETED") {
-                return { status: PaymentSessionStatus.AUTHORIZED }
+            if (!merchantOrderId) {
+                return { status: PaymentSessionStatus.ERROR }
             }
-            if (statusResponse.state === "PENDING") {
-                return { status: PaymentSessionStatus.PENDING }
-            }
-            return { status: PaymentSessionStatus.ERROR }
+
+            const statusResponse = await this.clientWrapper.getOrderStatus(merchantOrderId)
+            return { status: this.mapOrderStatus(statusResponse.state) }
         } catch (e) {
             return { status: PaymentSessionStatus.ERROR }
+        }
+    }
+
+    async retrievePayment(input: any) {
+        const merchantOrderId = this.getMerchantOrderId(input)
+
+        if (!merchantOrderId) {
+            return { data: input?.data ?? {} }
+        }
+
+        const statusResponse = await this.clientWrapper.getOrderStatus(merchantOrderId)
+        return {
+            data: {
+                merchantOrderId,
+                state: statusResponse.state,
+                amount: statusResponse.amount,
+                orderId: statusResponse.orderId,
+                response: statusResponse,
+            }
+        }
+    }
+
+    private getMerchantOrderId(input: any): string | undefined {
+        return (
+            input?.merchantOrderId ||
+            input?.data?.merchantOrderId ||
+            input?.data?.id ||
+            input?.merchantTransactionId ||
+            input?.data?.merchantTransactionId
+        )
+    }
+
+    private mapOrderStatus(state?: string) {
+        switch (state) {
+            case "COMPLETED":
+                return PaymentSessionStatus.AUTHORIZED
+            case "PENDING":
+                return PaymentSessionStatus.PENDING
+            case "FAILED":
+            case "DECLINED":
+            case "CANCELLED":
+            case "CANCELED":
+                return PaymentSessionStatus.CANCELED
+            case "EXPIRED":
+                return PaymentSessionStatus.ERROR
+            default:
+                return PaymentSessionStatus.ERROR
         }
     }
 }

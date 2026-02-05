@@ -49,15 +49,14 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
     }
 
     async cancelPayment(input: any): Promise<any> {
-        return input
+        this.logger_.warn("PhonePe does not support canceling payments via API. Returning current data.")
+        return { data: input?.data ?? {} }
     }
 
     async capturePayment(input: any): Promise<any> {
         // PhonePe 'pay' is usually auto-captured.
-        return {
-            ...input,
-            status: "captured"
-        }
+        this.logger_.info("PhonePe captures payments automatically. Returning current data.")
+        return { data: input?.data ?? {} }
     }
 
     async refundPayment(input: any): Promise<any> {
@@ -74,15 +73,23 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
     }
 
     async deletePayment(input: any): Promise<any> {
-        return input
+        return await this.cancelPayment(input)
     }
 
     async retrievePayment(input: any): Promise<any> {
-        return input
+        return await this.paymentOperations_.retrievePayment(input)
     }
 
     async updatePayment(input: any): Promise<any> {
-        return this.initiatePayment(input)
+        if (input?.data?.merchantOrderId || input?.data?.id) {
+            return { data: input.data }
+        }
+
+        const initiated = await this.initiatePayment(input)
+        return {
+            status: initiated.status,
+            data: initiated.data ?? { merchantOrderId: initiated.id }
+        }
     }
 
     async getWebhookActionAndData(
