@@ -62,7 +62,8 @@ export class RefundOperations {
             numeric = Math.ceil(numeric / 10) * 10
         }
 
-        return parseInt(numeric.toString().split(".").shift(), 10)
+        const [whole = "0"] = numeric.toString().split(".")
+        return parseInt(whole, 10)
     }
 
     private getCurrencyMultiplier(currency: string): number {
