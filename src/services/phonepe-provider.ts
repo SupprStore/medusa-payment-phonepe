@@ -60,7 +60,10 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
 
     async initiatePayment(input: InitiatePaymentInput): Promise<InitiatePaymentOutput> {
         const origin = (input as any)?.context?.context?.origin || ""
-        const callbackUrl = this.options_.callbackUrl || `${origin}/phonepe/callback`
+        const callbackUrl = this.options_.callbackUrl || (origin ? `${origin}/phonepe/callback` : "")
+        if (!callbackUrl) {
+            throw new Error("Missing callbackUrl. Configure callbackUrl or provide context.origin.")
+        }
         try {
             return await this.paymentOperations_.initiatePayment(input, callbackUrl)
         } catch (error: any) {
@@ -72,7 +75,10 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
     // Not part of the Medusa payment provider interface, but exposed for mobile SDK flows.
     async createSdkOrder(input: InitiatePaymentInput): Promise<any> {
         const origin = (input as any)?.context?.context?.origin || ""
-        const callbackUrl = this.options_.callbackUrl || `${origin}/phonepe/callback`
+        const callbackUrl = this.options_.callbackUrl || (origin ? `${origin}/phonepe/callback` : "")
+        if (!callbackUrl) {
+            throw new Error("Missing callbackUrl. Configure callbackUrl or provide context.origin.")
+        }
         try {
             return await this.paymentOperations_.createSdkOrder(input, callbackUrl)
         } catch (error: any) {

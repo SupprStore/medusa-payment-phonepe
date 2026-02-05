@@ -129,6 +129,22 @@ describe("PhonePeProvider", () => {
 
             await expect(provider.initiatePayment(input as any)).rejects.toThrow("Missing amount.")
         })
+
+        it("should throw when callbackUrl is missing and origin not provided", async () => {
+            const providerNoCallback = new PhonePeProvider(container, {
+                ...options,
+                callbackUrl: undefined
+            })
+            const input = {
+                amount: 1000,
+                currency_code: "INR",
+                context: {
+                    payment_session_data: { merchantTransactionId: "MT123" }
+                }
+            }
+
+            await expect(providerNoCallback.initiatePayment(input as any)).rejects.toThrow("Missing callbackUrl.")
+        })
     })
 
     describe("authorizePayment", () => {
@@ -377,6 +393,33 @@ describe("PhonePeProvider", () => {
                     state: "COMPLETED",
                     amount: 1000,
                     orderId: "PG111"
+                }
+            ])
+        })
+
+        it("should return partial results when reconciliation fails for one payment", async () => {
+            mockClient.getOrderStatus
+                .mockResolvedValueOnce({
+                    merchantOrderId: "MT111",
+                    amount: 1000,
+                    state: "COMPLETED",
+                    orderId: "PG111"
+                })
+                .mockRejectedValueOnce(new Error("network"))
+
+            const result = await provider.reconcilePayments(["MT111", "MT222"])
+
+            expect(result).toEqual([
+                {
+                    merchantOrderId: "MT111",
+                    status: "authorized",
+                    state: "COMPLETED",
+                    amount: 1000,
+                    orderId: "PG111"
+                },
+                {
+                    merchantOrderId: "MT222",
+                    error: "network"
                 }
             ])
         })
