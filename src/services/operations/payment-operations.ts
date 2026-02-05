@@ -1,5 +1,5 @@
-import { PaymentSessionStatus } from "@medusajs/framework/utils"
-import { StandardCheckoutPayRequest } from "pg-sdk-node"
+import { BigNumber, MathBN, PaymentSessionStatus } from "@medusajs/framework/utils"
+import { MetaInfo, StandardCheckoutPayRequest } from "pg-sdk-node"
 import { PhonePeOptions } from "../../types"
 import { PhonePeClientWrapper } from "../phonepe-client-wrapper"
 
@@ -10,7 +10,7 @@ export class PaymentOperations {
     ) { }
 
     async initiatePayment(input: any, callbackUrl: string) {
-        const { amount, context, data } = input
+        const { amount, context, data, currency_code } = input
         const merchantOrderId =
             data?.merchantOrderId ||
             context?.idempotency_key ||
@@ -18,7 +18,10 @@ export class PaymentOperations {
             `MT-${Date.now()}`
 
         // PhonePe expects amount in paise (integers)
-        const phonePeAmount = Math.round(Number(amount))
+        const phonePeAmount = this.getSmallestUnit(amount, currency_code || "INR")
+        if (phonePeAmount < 100) {
+            throw new Error("PhonePe amount must be at least 100 (in paise).")
+        }
         const redirectUrl = this.options.redirectUrl || callbackUrl
 
         const requestBuilder = StandardCheckoutPayRequest.builder()
@@ -26,6 +29,11 @@ export class PaymentOperations {
             .amount(phonePeAmount)
             .redirectUrl(redirectUrl)
             .message("Payment for Order")
+
+        const metaInfo = this.buildMetaInfo(input)
+        if (metaInfo) {
+            requestBuilder.metaInfo(metaInfo)
+        }
 
         const payload = requestBuilder.build()
         const response = await this.clientWrapper.pay(payload)
@@ -136,5 +144,76 @@ export class PaymentOperations {
             default:
                 return PaymentSessionStatus.ERROR
         }
+    }
+
+    private buildMetaInfo(input: any) {
+        const customer = input?.context?.customer
+        const data = input?.data
+        const udf1 = customer?.id
+        const udf2 = customer?.email
+        const udf3 = customer?.phone || customer?.billing_address?.phone
+        const udf4 = data?.session_id || data?.id
+        const udf5 = data?.cart_id || input?.context?.idempotency_key
+
+        const values = [udf1, udf2, udf3, udf4, udf5].filter((value) => value)
+        if (values.length === 0) {
+            return undefined
+        }
+
+        const builder = MetaInfo.builder()
+        if (udf1) builder.udf1(String(udf1))
+        if (udf2) builder.udf2(String(udf2))
+        if (udf3) builder.udf3(String(udf3))
+        if (udf4) builder.udf4(String(udf4))
+        if (udf5) builder.udf5(String(udf5))
+
+        return builder.build()
+    }
+
+    private getSmallestUnit(amount: any, currency: string): number {
+        const multiplier = this.getCurrencyMultiplier(currency)
+        let amountRounded = Math.round(new BigNumber(MathBN.mult(amount, multiplier)).numeric) / multiplier
+        const smallestAmount = new BigNumber(MathBN.mult(amountRounded, multiplier))
+        let numeric = smallestAmount.numeric
+
+        if (multiplier === 1e3) {
+            numeric = Math.ceil(numeric / 10) * 10
+        }
+
+        return parseInt(numeric.toString().split(".").shift(), 10)
+    }
+
+    private getCurrencyMultiplier(currency: string): number {
+        const currencyMultipliers: Record<number, string[]> = {
+            0: [
+                "BIF",
+                "CLP",
+                "DJF",
+                "GNF",
+                "JPY",
+                "KMF",
+                "KRW",
+                "MGA",
+                "PYG",
+                "RWF",
+                "UGX",
+                "VND",
+                "VUV",
+                "XAF",
+                "XOF",
+                "XPF",
+            ],
+            3: ["BHD", "IQD", "JOD", "KWD", "OMR", "TND"],
+        }
+
+        const normalized = currency.toUpperCase()
+        let power = 2
+        for (const [key, value] of Object.entries(currencyMultipliers)) {
+            if (value.includes(normalized)) {
+                power = parseInt(key, 10)
+                break
+            }
+        }
+        return Math.pow(10, power)
     }
 }
