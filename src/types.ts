@@ -24,4 +24,7 @@ export interface PhonePeOptions {
     // Retry behavior for transient SDK failures
     maxRetries?: number
     retryDelayMs?: number
+
+    // Webhook verification behavior
+    webhookVerifyWithApi?: boolean
 }

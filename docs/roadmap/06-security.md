@@ -1,5 +1,5 @@
 # Security Findings
 
-- **Webhook verification mismatch**: Current `x-verify` hash validation does not match the SDK’s documented callback verification flow (username/password + Authorization header). This could allow forged callbacks if PhonePe sends Basic Auth–validated callbacks.
-- **No validation of order ID/amount in webhook**: Callback processing trusts decoded payload without confirming it matches known merchant order IDs or amounts in Medusa.
-- **Credential naming risk**: Using `merchantId/saltKey` suggests API-integration credentials, which do not match Node SDK’s `clientId/clientSecret` requirements.
+- **Webhook verification mismatch**: Mitigated by using SDK `validateCallback` when authorization header and callback credentials are provided. Legacy `x-verify` remains as fallback for backward compatibility.
+- **No validation of order ID/amount in webhook**: Mitigated by verifying webhook payload against `getOrderStatus(merchantOrderId)` when `webhookVerifyWithApi` is enabled (default).
+- **Credential naming risk**: Mitigated by supporting SDK-aligned `clientId/clientSecret/clientVersion` and warning when legacy keys are used.

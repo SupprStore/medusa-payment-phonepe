@@ -15,6 +15,11 @@ export class WebhookValidator {
         const authorization = (headers["authorization"] || headers["Authorization"]) as string | undefined
         const username = this.options.callbackUsername
         const password = this.options.callbackPassword
+        const verifyWithApi = this.options.webhookVerifyWithApi ?? true
+
+        if (authorization && (!username || !password)) {
+            return { action: "failed" }
+        }
 
         if (authorization && username && password) {
             try {
@@ -34,6 +39,13 @@ export class WebhookValidator {
 
                 if (!merchantOrderId) {
                     return { action: "not_supported" }
+                }
+
+                if (verifyWithApi) {
+                    const isValid = await this.verifyOrderWithApi(merchantOrderId, amount)
+                    if (!isValid) {
+                        return { action: "failed" }
+                    }
                 }
 
                 switch (state) {
@@ -102,13 +114,21 @@ export class WebhookValidator {
 
             const { code, data: paymentData } = decodedBody
             const merchantTransactionId = paymentData.merchantTransactionId
+            const amount = paymentData.amount
+
+            if (verifyWithApi) {
+                const isValid = await this.verifyOrderWithApi(merchantTransactionId, amount)
+                if (!isValid) {
+                    return { action: "failed" }
+                }
+            }
 
             if (code === "PAYMENT_SUCCESS") {
                 return {
                     action: "authorized",
                     data: {
                         session_id: merchantTransactionId,
-                        amount: paymentData.amount,
+                        amount,
                     },
                 }
             } else if (code === "PAYMENT_ERROR" || code === "PAYMENT_DECLINED") {
@@ -116,7 +136,7 @@ export class WebhookValidator {
                     action: "failed",
                     data: {
                         session_id: merchantTransactionId,
-                        amount: paymentData.amount || 0,
+                        amount: amount || 0,
                     }
                 }
             }
@@ -125,5 +145,23 @@ export class WebhookValidator {
         }
 
         return { action: "not_supported" }
+    }
+
+    private async verifyOrderWithApi(merchantOrderId: string, amount?: number): Promise<boolean> {
+        try {
+            const status = await this.clientWrapper.getOrderStatus(merchantOrderId)
+
+            if (status?.merchantOrderId && status.merchantOrderId !== merchantOrderId) {
+                return false
+            }
+
+            if (typeof amount === "number" && status?.amount !== undefined && status.amount !== amount) {
+                return false
+            }
+
+            return true
+        } catch (e) {
+            return false
+        }
     }
 }

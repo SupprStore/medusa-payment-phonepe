@@ -31,6 +31,10 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
         this.paymentOperations_ = new PaymentOperations(this.clientWrapper_, this.options_)
         this.refundOperations_ = new RefundOperations(this.clientWrapper_)
         this.webhookValidator_ = new WebhookValidator(this.options_, this.clientWrapper_)
+
+        if (!this.options_.clientId && this.options_.merchantId) {
+            this.logger_.warn("PhonePe: using legacy merchantId/saltKey/saltIndex. Prefer clientId/clientSecret/clientVersion.")
+        }
     }
 
     async initiatePayment(input: any): Promise<any> {

@@ -79,6 +79,14 @@ describe("PhonePeProvider", () => {
         provider = new PhonePeProvider(container, options)
     })
 
+    beforeEach(() => {
+        mockClient.getOrderStatus.mockResolvedValue({
+            merchantOrderId: "MT123",
+            amount: 1000,
+            state: "COMPLETED"
+        })
+    })
+
     describe("initiatePayment", () => {
         it("should initiate payment successfully", async () => {
             const input = {
@@ -217,6 +225,12 @@ describe("PhonePeProvider", () => {
 
             mockClient.validateCallback.mockReturnValue({
                 payload: { state: "COMPLETED", merchantOrderId: "MT456", amount: 2000 }
+            })
+
+            mockClient.getOrderStatus.mockResolvedValueOnce({
+                merchantOrderId: "MT456",
+                amount: 2000,
+                state: "COMPLETED"
             })
 
             const providerWithCallback = new PhonePeProvider(container, {
