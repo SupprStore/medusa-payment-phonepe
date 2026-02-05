@@ -1,11 +1,13 @@
 import { BigNumber, MathBN } from "@medusajs/framework/utils"
+import * as crypto from "crypto"
 import { RefundRequest } from "pg-sdk-node"
 import { PhonePeClientWrapper } from "../phonepe-client-wrapper"
+import { PhonePeOperationInput } from "./operation-types"
 
 export class RefundOperations {
     constructor(private clientWrapper: PhonePeClientWrapper) { }
 
-    async refundPayment(input: any) {
+    async refundPayment(input: PhonePeOperationInput & { amount: any }) {
         const paymentSessionData = input.data || {}
         const refundAmount = input.amount
         const currency = input.currency_code || paymentSessionData.currency_code || "INR"
@@ -18,7 +20,7 @@ export class RefundOperations {
         const merchantRefundId =
             paymentSessionData.merchantRefundId ||
             input.context?.idempotency_key ||
-            `REF-${paymentSessionData.merchantOrderId || paymentSessionData.merchantTransactionId || Date.now()}`
+            `REF-${crypto.randomUUID()}`
 
         const originalTransactionId =
             paymentSessionData.merchantOrderId ||

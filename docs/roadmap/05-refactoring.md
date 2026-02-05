@@ -1,6 +1,6 @@
 # Refactoring Needed
 
-- **Options schema**: Rename and deprecate old config keys; add migration notes.
-- **Strong typing**: Replace `any` inputs/outputs with SDK request/response types to reduce runtime mistakes.
-- **ID generation**: Use stable IDs (e.g., Medusa payment/refund IDs or UUIDs) instead of timestamps to support idempotency and retries.
-- **Provider separation**: Move request-building and response-mapping to a dedicated mapper layer for testability.
+- **Options schema**: Implemented SDK-aligned options with legacy fallback; warnings and README migration notes added.
+- **Strong typing**: Introduced operation input types and reduced `any` usage in operations.
+- **ID generation**: Implemented UUID-based fallbacks and idempotency key use for stable IDs.
+- **Provider separation**: Implemented mapper layer for request building and status mapping.

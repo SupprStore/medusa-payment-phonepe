@@ -16,6 +16,7 @@ yarn add medusa-payment-phonepe
 
 
 ## Configuration
+Legacy `merchantId/saltKey/saltIndex` are deprecated. Use `clientId/clientSecret/clientVersion`.
 
 In `medusa-config.ts`:
 
@@ -41,6 +42,7 @@ module.exports = defineConfig({
               callbackUrl: process.env.PHONEPE_CALLBACK_URL,
               callbackUsername: process.env.PHONEPE_CALLBACK_USERNAME,
               callbackPassword: process.env.PHONEPE_CALLBACK_PASSWORD,
+              webhookVerifyWithApi: true,
               maxRetries: 2,
               retryDelayMs: 500,
               redirectMode: "POST", // "POST" or "GET" (default: POST)
