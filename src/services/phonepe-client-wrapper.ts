@@ -2,6 +2,8 @@ import { Env, PhonePeException, ServerError, StandardCheckoutClient, TooManyRequ
 import { PhonePeOptions } from "../types"
 
 export class PhonePeClientWrapper {
+    private static sharedClient?: StandardCheckoutClient
+    private static configSignature?: string
     private client: StandardCheckoutClient
     private options: PhonePeOptions
 
@@ -10,14 +12,31 @@ export class PhonePeClientWrapper {
         const env = options.mode === "prod" ? Env.PRODUCTION : Env.SANDBOX
         const { clientId, clientSecret, clientVersion } = this.resolveCredentials(options)
         const shouldPublishEvents = options.shouldPublishEvents ?? true
-
-        this.client = StandardCheckoutClient.getInstance(
+        const signature = JSON.stringify({
             clientId,
             clientSecret,
             clientVersion,
             env,
             shouldPublishEvents
-        )
+        })
+
+        if (PhonePeClientWrapper.sharedClient) {
+            if (PhonePeClientWrapper.configSignature !== signature) {
+                throw new Error("PhonePe client already initialized with different credentials or environment.")
+            }
+
+            this.client = PhonePeClientWrapper.sharedClient
+        } else {
+            this.client = StandardCheckoutClient.getInstance(
+                clientId,
+                clientSecret,
+                clientVersion,
+                env,
+                shouldPublishEvents
+            )
+            PhonePeClientWrapper.sharedClient = this.client
+            PhonePeClientWrapper.configSignature = signature
+        }
     }
 
     getClient(): StandardCheckoutClient {
@@ -50,6 +69,11 @@ export class PhonePeClientWrapper {
 
     validateCallback(username: string, password: string, authorization: string, responseBody: string) {
         return this.client.validateCallback(username, password, authorization, responseBody)
+    }
+
+    static resetForTests() {
+        PhonePeClientWrapper.sharedClient = undefined
+        PhonePeClientWrapper.configSignature = undefined
     }
 
     private resolveCredentials(options: PhonePeOptions) {

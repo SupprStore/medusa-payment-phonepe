@@ -1,8 +1,10 @@
 import { BigNumber, MathBN, PaymentSessionStatus } from "@medusajs/framework/utils"
+import * as crypto from "crypto"
 import { MetaInfo } from "pg-sdk-node"
 import { PhonePeOptions } from "../../types"
 import { PhonePeClientWrapper } from "../phonepe-client-wrapper"
 import { PhonePeMapper } from "../mappers/phonepe-mapper"
+import { PhonePeOperationInput, PhonePePaymentData } from "./operation-types"
 
 export class PaymentOperations {
     constructor(
@@ -10,13 +12,13 @@ export class PaymentOperations {
         private options: PhonePeOptions
     ) { }
 
-    async initiatePayment(input: any, callbackUrl: string) {
+    async initiatePayment(input: PhonePeOperationInput, callbackUrl: string) {
         const { amount, context, data, currency_code } = input
         const merchantOrderId =
             data?.merchantOrderId ||
             context?.idempotency_key ||
             context?.payment_session_data?.merchantTransactionId ||
-            `MT-${Date.now()}`
+            `MT-${crypto.randomUUID()}`
 
         // PhonePe expects amount in paise (integers)
         const phonePeAmount = this.getSmallestUnit(amount, currency_code || "INR")
@@ -44,7 +46,7 @@ export class PaymentOperations {
         }
     }
 
-    async authorizePayment(paymentSessionData: any) {
+    async authorizePayment(paymentSessionData: PhonePeOperationInput) {
         const merchantOrderId = this.getMerchantOrderId(paymentSessionData)
 
         try {
@@ -81,7 +83,7 @@ export class PaymentOperations {
         }
     }
 
-    async getPaymentStatus(paymentSessionData: any) {
+    async getPaymentStatus(paymentSessionData: PhonePeOperationInput) {
         const merchantOrderId = this.getMerchantOrderId(paymentSessionData)
 
         try {
@@ -96,7 +98,7 @@ export class PaymentOperations {
         }
     }
 
-    async retrievePayment(input: any) {
+    async retrievePayment(input: PhonePeOperationInput) {
         const merchantOrderId = this.getMerchantOrderId(input)
 
         if (!merchantOrderId) {
@@ -115,13 +117,13 @@ export class PaymentOperations {
         }
     }
 
-    async createSdkOrder(input: any, callbackUrl: string) {
+    async createSdkOrder(input: PhonePeOperationInput, callbackUrl: string) {
         const { amount, context, data, currency_code } = input
         const merchantOrderId =
             data?.merchantOrderId ||
             context?.idempotency_key ||
             context?.payment_session_data?.merchantTransactionId ||
-            `MT-${Date.now()}`
+            `MT-${crypto.randomUUID()}`
 
         const phonePeAmount = this.getSmallestUnit(amount, currency_code || "INR")
         if (phonePeAmount < 100) {
@@ -148,13 +150,15 @@ export class PaymentOperations {
         }
     }
 
-    private getMerchantOrderId(input: any): string | undefined {
+    private getMerchantOrderId(input: PhonePeOperationInput | PhonePePaymentData): string | undefined {
+        const data = (input as PhonePeOperationInput).data
+        const flat = input as PhonePePaymentData
         return (
-            input?.merchantOrderId ||
-            input?.data?.merchantOrderId ||
-            input?.data?.id ||
-            input?.merchantTransactionId ||
-            input?.data?.merchantTransactionId
+            flat?.merchantOrderId ||
+            data?.merchantOrderId ||
+            data?.id ||
+            flat?.merchantTransactionId ||
+            data?.merchantTransactionId
         )
     }
 

@@ -1,6 +1,7 @@
 import { PhonePeProvider } from "../phonepe-provider"
 import { CreateSdkOrderRequest, MetaInfo, StandardCheckoutClient, StandardCheckoutPayRequest, RefundRequest } from "pg-sdk-node"
 import * as crypto from "crypto"
+import { PhonePeClientWrapper } from "../phonepe-client-wrapper"
 
 jest.mock("pg-sdk-node")
 
@@ -36,6 +37,7 @@ describe("PhonePeProvider", () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        PhonePeClientWrapper.resetForTests();
         (StandardCheckoutClient.getInstance as jest.Mock).mockReturnValue(mockClient);
 
         // Mock StandardCheckoutPayRequest
