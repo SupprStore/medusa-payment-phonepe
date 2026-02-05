@@ -31,7 +31,7 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
         this.clientWrapper_ = new PhonePeClientWrapper(this.options_)
         this.paymentOperations_ = new PaymentOperations(this.clientWrapper_, this.options_)
         this.refundOperations_ = new RefundOperations(this.clientWrapper_)
-        this.webhookValidator_ = new WebhookValidator(this.options_)
+        this.webhookValidator_ = new WebhookValidator(this.options_, this.clientWrapper_)
     }
 
     async initiatePayment(input: any): Promise<any> {

@@ -1,27 +1,90 @@
 import { ProviderWebhookPayload, WebhookActionResult } from "@medusajs/types"
 import * as crypto from "crypto"
 import { PhonePeOptions } from "../../types"
+import { PhonePeClientWrapper } from "../phonepe-client-wrapper"
 
 export class WebhookValidator {
-    constructor(private options: PhonePeOptions) { }
+    constructor(
+        private options: PhonePeOptions,
+        private clientWrapper: PhonePeClientWrapper
+    ) { }
 
     async getWebhookActionAndData(payload: ProviderWebhookPayload["payload"]): Promise<WebhookActionResult> {
-        const { data, headers } = payload
+        const { data, headers, rawData } = payload
 
-        // 1. Verify Signature
-        const xVerify = headers["x-verify"]
+        const authorization = (headers["authorization"] || headers["Authorization"]) as string | undefined
+        const username = this.options.callbackUsername
+        const password = this.options.callbackPassword
+
+        if (authorization && username && password) {
+            try {
+                const rawBody =
+                    typeof rawData === "string" ? rawData : rawData ? rawData.toString("utf-8") : JSON.stringify(data)
+
+                const callback = this.clientWrapper.validateCallback(
+                    username,
+                    password,
+                    authorization,
+                    rawBody
+                )
+
+                const state = callback?.payload?.state
+                const merchantOrderId = callback?.payload?.merchantOrderId
+                const amount = callback?.payload?.amount
+
+                if (!merchantOrderId) {
+                    return { action: "not_supported" }
+                }
+
+                switch (state) {
+                    case "COMPLETED":
+                        return {
+                            action: "authorized",
+                            data: { session_id: merchantOrderId, amount }
+                        }
+                    case "PENDING":
+                        return {
+                            action: "pending",
+                            data: { session_id: merchantOrderId, amount }
+                        }
+                    case "CANCELLED":
+                    case "CANCELED":
+                        return {
+                            action: "canceled",
+                            data: { session_id: merchantOrderId, amount }
+                        }
+                    case "FAILED":
+                    case "DECLINED":
+                    case "EXPIRED":
+                        return {
+                            action: "failed",
+                            data: { session_id: merchantOrderId, amount: amount || 0 }
+                        }
+                    default:
+                        return { action: "not_supported" }
+                }
+            } catch (e) {
+                return { action: "failed" }
+            }
+        }
+
+        // Legacy checksum verification (x-verify)
+        const xVerify = headers["x-verify"] as string | undefined
         if (!xVerify) {
             return { action: "not_supported" }
         }
 
         const { response } = data as { response: string }
-
         if (!response) {
             return { action: "not_supported" }
         }
 
         const saltKey = this.options.saltKey
         const saltIndex = this.options.saltIndex || "1"
+
+        if (!saltKey) {
+            return { action: "not_supported" }
+        }
 
         // Checksum = SHA256(response + saltKey) + ### + saltIndex
         const generatedSignature = crypto
@@ -33,7 +96,6 @@ export class WebhookValidator {
             return { action: "failed" }
         }
 
-        // 2. Decode Payload
         try {
             const buffer = Buffer.from(response, "base64")
             const decodedBody = JSON.parse(buffer.toString("utf-8"))
@@ -60,11 +122,8 @@ export class WebhookValidator {
             }
         } catch (e) {
             return { action: "not_supported" }
-            // Or log error, but validator usually returns result
         }
 
-        return {
-            action: "not_supported",
-        }
+        return { action: "not_supported" }
     }
 }
