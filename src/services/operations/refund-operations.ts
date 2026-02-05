@@ -11,6 +11,7 @@ export class RefundOperations {
         const paymentSessionData = input.data || {}
         const refundAmount = input.amount
         const currency = input.currency_code || paymentSessionData.currency_code || "INR"
+        this.assertAmount(refundAmount)
         const amount = this.getSmallestUnit(refundAmount, currency)
 
         if (amount <= 0) {
@@ -66,6 +67,17 @@ export class RefundOperations {
 
         const [whole = "0"] = numeric.toString().split(".")
         return parseInt(whole, 10)
+    }
+
+    private assertAmount(amount: unknown) {
+        if (amount === undefined || amount === null) {
+            throw new Error("Missing amount.")
+        }
+
+        const numeric = new BigNumber(amount as any).numeric
+        if (!Number.isFinite(Number(numeric))) {
+            throw new Error("Invalid amount.")
+        }
     }
 
     private getCurrencyMultiplier(currency: string): number {

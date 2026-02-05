@@ -31,6 +31,7 @@ describe("PhonePeProvider", () => {
         pay: jest.fn(),
         refund: jest.fn(),
         getOrderStatus: jest.fn(),
+        getRefundStatus: jest.fn(),
         validateCallback: jest.fn(),
         createSdkOrder: jest.fn(),
     }
@@ -96,7 +97,7 @@ describe("PhonePeProvider", () => {
                 currency_code: "INR",
                 context: {
                     payment_session_data: { merchantTransactionId: "MT123" },
-                    customer: { id: "cust_123" }
+                    customer: { id: "cust_123", email: "test@example.com" }
                 }
             }
 
@@ -117,6 +118,33 @@ describe("PhonePeProvider", () => {
                 }
             })
         })
+
+        it("should throw when amount is missing", async () => {
+            const input = {
+                currency_code: "INR",
+                context: {
+                    payment_session_data: { merchantTransactionId: "MT123" }
+                }
+            }
+
+            await expect(provider.initiatePayment(input as any)).rejects.toThrow("Missing amount.")
+        })
+
+        it("should throw when callbackUrl is missing and origin not provided", async () => {
+            const providerNoCallback = new PhonePeProvider(container, {
+                ...options,
+                callbackUrl: undefined
+            })
+            const input = {
+                amount: 1000,
+                currency_code: "INR",
+                context: {
+                    payment_session_data: { merchantTransactionId: "MT123" }
+                }
+            }
+
+            await expect(providerNoCallback.initiatePayment(input as any)).rejects.toThrow("Missing callbackUrl.")
+        })
     })
 
     describe("authorizePayment", () => {
@@ -130,7 +158,7 @@ describe("PhonePeProvider", () => {
             const result = await provider.authorizePayment({ data: { merchantOrderId: "MT123" } })
 
             expect(result.status).toBe("authorized")
-            expect(result.data.paymentId).toBe("PG123")
+            expect((result.data as any).paymentId).toBe("PG123")
         })
 
         it("should return pending status when payment is pending", async () => {
@@ -161,7 +189,7 @@ describe("PhonePeProvider", () => {
             const result = await provider.refundPayment(input)
 
             expect(mockClient.refund).toHaveBeenCalled()
-            expect(result.data.refundResponse.state).toBe("COMPLETED")
+            expect(((result.data as any).refundResponse as any).state).toBe("COMPLETED")
         })
     })
 
@@ -172,7 +200,7 @@ describe("PhonePeProvider", () => {
                 currency_code: "INR",
                 context: {
                     payment_session_data: { merchantTransactionId: "MT123" },
-                    customer: { id: "cust_123" }
+                    customer: { id: "cust_123", email: "test@example.com" }
                 }
             }
 
@@ -249,6 +277,59 @@ describe("PhonePeProvider", () => {
             })
         })
 
+        it("should return not_supported when auth header exists without credentials", async () => {
+            const payload = {
+                data: { any: "payload" },
+                rawData: JSON.stringify({}),
+                headers: { authorization: "Basic abc123" }
+            }
+
+            const result = await provider.getWebhookActionAndData(payload as any)
+
+            expect(result).toEqual({ action: "not_supported" })
+        })
+
+        it("should return not_supported when rawData is missing for SDK validation", async () => {
+            const payload = {
+                data: { any: "payload" },
+                headers: { authorization: "Basic abc123" }
+            }
+
+            const providerWithCallback = new PhonePeProvider(container, {
+                ...options,
+                callbackUsername: "cb-user",
+                callbackPassword: "cb-pass",
+            })
+
+            const result = await providerWithCallback.getWebhookActionAndData(payload as any)
+
+            expect(result).toEqual({ action: "not_supported" })
+        })
+
+        it("should return not_supported when API verification is indeterminate", async () => {
+            const payload = {
+                data: { any: "payload" },
+                rawData: JSON.stringify({}),
+                headers: { authorization: "Basic abc123" }
+            }
+
+            mockClient.validateCallback.mockReturnValue({
+                payload: { state: "COMPLETED", merchantOrderId: "MT789", amount: 3000 }
+            })
+
+            mockClient.getOrderStatus.mockRejectedValueOnce(new Error("timeout"))
+
+            const providerWithCallback = new PhonePeProvider(container, {
+                ...options,
+                callbackUsername: "cb-user",
+                callbackPassword: "cb-pass",
+            })
+
+            const result = await providerWithCallback.getWebhookActionAndData(payload as any)
+
+            expect(result).toEqual({ action: "not_supported" })
+        })
+
         it("should return not_supported if signature is missing", async () => {
             const payload = {
                 data: { response: encodedBody },
@@ -291,6 +372,77 @@ describe("PhonePeProvider", () => {
                 action: "failed",
                 data: { session_id: "MT123", amount: 0 }
             })
+        })
+    })
+
+    describe("reconciliation", () => {
+        it("should reconcile payments via getOrderStatus", async () => {
+            mockClient.getOrderStatus.mockResolvedValueOnce({
+                merchantOrderId: "MT111",
+                amount: 1000,
+                state: "COMPLETED",
+                orderId: "PG111"
+            })
+
+            const result = await provider.reconcilePayments(["MT111"])
+
+            expect(result).toEqual([
+                {
+                    merchantOrderId: "MT111",
+                    status: "authorized",
+                    state: "COMPLETED",
+                    amount: 1000,
+                    orderId: "PG111"
+                }
+            ])
+        })
+
+        it("should return partial results when reconciliation fails for one payment", async () => {
+            mockClient.getOrderStatus
+                .mockResolvedValueOnce({
+                    merchantOrderId: "MT111",
+                    amount: 1000,
+                    state: "COMPLETED",
+                    orderId: "PG111"
+                })
+                .mockRejectedValueOnce(new Error("network"))
+
+            const result = await provider.reconcilePayments(["MT111", "MT222"])
+
+            expect(result).toEqual([
+                {
+                    merchantOrderId: "MT111",
+                    status: "authorized",
+                    state: "COMPLETED",
+                    amount: 1000,
+                    orderId: "PG111"
+                },
+                {
+                    merchantOrderId: "MT222",
+                    error: "network"
+                }
+            ])
+        })
+
+        it("should reconcile refunds via getRefundStatus", async () => {
+            mockClient.getRefundStatus.mockResolvedValueOnce({
+                merchantRefundId: "REF111",
+                originalMerchantOrderId: "MT111",
+                amount: 500,
+                state: "COMPLETED"
+            })
+
+            const result = await provider.reconcileRefunds(["REF111"])
+
+            expect(result).toEqual([
+                {
+                    refundId: "REF111",
+                    state: "COMPLETED",
+                    amount: 500,
+                    merchantRefundId: "REF111",
+                    originalMerchantOrderId: "MT111"
+                }
+            ])
         })
     })
 })

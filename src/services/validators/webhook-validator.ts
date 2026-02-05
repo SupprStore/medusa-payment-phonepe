@@ -18,13 +18,17 @@ export class WebhookValidator {
         const verifyWithApi = this.options.webhookVerifyWithApi ?? true
 
         if (authorization && (!username || !password)) {
-            return { action: "failed" }
+            return { action: "not_supported" }
         }
 
         if (authorization && username && password) {
             try {
+                if (!rawData) {
+                    return { action: "not_supported" }
+                }
+
                 const rawBody =
-                    typeof rawData === "string" ? rawData : rawData ? rawData.toString("utf-8") : JSON.stringify(data)
+                    typeof rawData === "string" ? rawData : rawData.toString("utf-8")
 
                 const callback = this.clientWrapper.validateCallback(
                     username,
@@ -42,9 +46,12 @@ export class WebhookValidator {
                 }
 
                 if (verifyWithApi) {
-                    const isValid = await this.verifyOrderWithApi(merchantOrderId, amount)
-                    if (!isValid) {
+                    const verification = await this.verifyOrderWithApi(merchantOrderId, amount)
+                    if (verification === "invalid") {
                         return { action: "failed" }
+                    }
+                    if (verification === "unknown") {
+                        return { action: "not_supported" }
                     }
                 }
 
@@ -117,9 +124,12 @@ export class WebhookValidator {
             const amount = paymentData.amount
 
             if (verifyWithApi) {
-                const isValid = await this.verifyOrderWithApi(merchantTransactionId, amount)
-                if (!isValid) {
+                const verification = await this.verifyOrderWithApi(merchantTransactionId, amount)
+                if (verification === "invalid") {
                     return { action: "failed" }
+                }
+                if (verification === "unknown") {
+                    return { action: "not_supported" }
                 }
             }
 
@@ -147,21 +157,28 @@ export class WebhookValidator {
         return { action: "not_supported" }
     }
 
-    private async verifyOrderWithApi(merchantOrderId: string, amount?: number): Promise<boolean> {
+    private async verifyOrderWithApi(
+        merchantOrderId: string,
+        amount?: number
+    ): Promise<"valid" | "invalid" | "unknown"> {
         try {
             const status = await this.clientWrapper.getOrderStatus(merchantOrderId)
 
             if (status?.merchantOrderId && status.merchantOrderId !== merchantOrderId) {
-                return false
+                return "invalid"
             }
 
             if (typeof amount === "number" && status?.amount !== undefined && status.amount !== amount) {
-                return false
+                return "invalid"
             }
 
-            return true
+            if (!status?.merchantOrderId && typeof amount !== "number") {
+                return "unknown"
+            }
+
+            return "valid"
         } catch (e) {
-            return false
+            return "unknown"
         }
     }
 }

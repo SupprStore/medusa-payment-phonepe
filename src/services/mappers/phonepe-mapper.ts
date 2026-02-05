@@ -52,7 +52,7 @@ export const PhonePeMapper = {
             case "DECLINED":
             case "CANCELLED":
             case "CANCELED":
-                return PaymentSessionStatus.CANCELED
+                return PaymentSessionStatus.ERROR
             case "EXPIRED":
             default:
                 return PaymentSessionStatus.ERROR

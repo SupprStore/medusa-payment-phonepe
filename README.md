@@ -45,7 +45,6 @@ module.exports = defineConfig({
               webhookVerifyWithApi: true,
               maxRetries: 2,
               retryDelayMs: 500,
-              redirectMode: "POST", // "POST" or "GET" (default: POST)
             },
           },
         ],
@@ -60,6 +59,11 @@ The provider validates callbacks using the SDK `validateCallback` method, which 
 
 ## Mobile SDK Order (Optional)
 For mobile SDK flows, this provider exposes a `createSdkOrder` method that returns the SDK order token inside `data.sdkOrder`.
+
+## Reconciliation Helpers
+If webhooks are missed, you can reconcile with:
+- `reconcilePayments(merchantOrderIds: string[])`
+- `reconcileRefunds(refundIds: string[])`
 
 ```
 
