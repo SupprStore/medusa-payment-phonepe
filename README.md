@@ -41,6 +41,8 @@ module.exports = defineConfig({
               callbackUrl: process.env.PHONEPE_CALLBACK_URL,
               callbackUsername: process.env.PHONEPE_CALLBACK_USERNAME,
               callbackPassword: process.env.PHONEPE_CALLBACK_PASSWORD,
+              maxRetries: 2,
+              retryDelayMs: 500,
               redirectMode: "POST", // "POST" or "GET" (default: POST)
             },
           },
@@ -53,6 +55,9 @@ module.exports = defineConfig({
 ## Webhooks
 To handle asynchronous payment updates (like when a user closes the browser after payment), configure the `callbackUrl` and ensure your Medusa server can receive POST requests at that URL.
 The provider validates callbacks using the SDK `validateCallback` method, which expects the `authorization` header plus the callback username/password configured on the PhonePe dashboard.
+
+## Mobile SDK Order (Optional)
+For mobile SDK flows, this provider exposes a `createSdkOrder` method that returns the SDK order token inside `data.sdkOrder`.
 
 ```
 
