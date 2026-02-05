@@ -33,12 +33,14 @@ module.exports = defineConfig({
             resolve: "medusa-payment-phonepe",
             id: "phonepe",
             options: {
-              merchantId: process.env.PHONEPE_MERCHANT_ID,
-              saltKey: process.env.PHONEPE_SALT_KEY,
-              saltIndex: process.env.PHONEPE_SALT_INDEX,
+              clientId: process.env.PHONEPE_CLIENT_ID,
+              clientSecret: process.env.PHONEPE_CLIENT_SECRET,
+              clientVersion: process.env.PHONEPE_CLIENT_VERSION,
               mode: process.env.PHONEPE_MODE, // "uat" or "prod"
               redirectUrl: process.env.PHONEPE_REDIRECT_URL,
               callbackUrl: process.env.PHONEPE_CALLBACK_URL,
+              callbackUsername: process.env.PHONEPE_CALLBACK_USERNAME,
+              callbackPassword: process.env.PHONEPE_CALLBACK_PASSWORD,
               redirectMode: "POST", // "POST" or "GET" (default: POST)
             },
           },
@@ -50,17 +52,19 @@ module.exports = defineConfig({
 
 ## Webhooks
 To handle asynchronous payment updates (like when a user closes the browser after payment), configure the `callbackUrl` and ensure your Medusa server can receive POST requests at that URL.
-The provider implementation verifies the `X-VERIFY` signature from PhonePe.
+The provider validates callbacks using the SDK `validateCallback` method, which expects the `authorization` header plus the callback username/password configured on the PhonePe dashboard.
 
 ```
 
 ## Environment Variables
 
 ```bash
-PHONEPE_MERCHANT_ID=your_merchant_id
-PHONEPE_SALT_KEY=your_salt_key
-PHONEPE_SALT_INDEX=1
+PHONEPE_CLIENT_ID=your_client_id
+PHONEPE_CLIENT_SECRET=your_client_secret
+PHONEPE_CLIENT_VERSION=1
 PHONEPE_MODE=uat
 PHONEPE_REDIRECT_URL=http://localhost:8000/payment/callback
 PHONEPE_CALLBACK_URL=http://localhost:9000/hooks/payment/phonepe
+PHONEPE_CALLBACK_USERNAME=your_callback_username
+PHONEPE_CALLBACK_PASSWORD=your_callback_password
 ```

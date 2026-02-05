@@ -6,14 +6,15 @@ export class PhonePeClientWrapper {
 
     constructor(options: PhonePeOptions) {
         const env = options.mode === "prod" ? Env.PRODUCTION : Env.SANDBOX
-        const clientVersion = parseInt(options.saltIndex || "1", 10)
+        const { clientId, clientSecret, clientVersion } = this.resolveCredentials(options)
+        const shouldPublishEvents = options.shouldPublishEvents ?? true
 
         this.client = StandardCheckoutClient.getInstance(
-            options.merchantId,
-            options.saltKey,
+            clientId,
+            clientSecret,
             clientVersion,
             env,
-            true // shouldPublishEvents
+            shouldPublishEvents
         )
     }
 
@@ -31,5 +32,44 @@ export class PhonePeClientWrapper {
 
     async getOrderStatus(merchantTransactionId: string) {
         return this.client.getOrderStatus(merchantTransactionId)
+    }
+
+    async getRefundStatus(refundId: string) {
+        return this.client.getRefundStatus(refundId)
+    }
+
+    async getTransactionStatus(transactionId: string) {
+        return this.client.getTransactionStatus(transactionId)
+    }
+
+    async createSdkOrder(payload: any) {
+        return this.client.createSdkOrder(payload)
+    }
+
+    validateCallback(username: string, password: string, authorization: string, responseBody: string) {
+        return this.client.validateCallback(username, password, authorization, responseBody)
+    }
+
+    private resolveCredentials(options: PhonePeOptions) {
+        const clientId = options.clientId || options.merchantId
+        const clientSecret = options.clientSecret || options.saltKey
+        const rawVersion = options.clientVersion ?? options.saltIndex
+
+        if (!clientId || !clientSecret || rawVersion === undefined) {
+            throw new Error(
+                "Missing PhonePe credentials. Provide clientId/clientSecret/clientVersion (preferred) " +
+                "or legacy merchantId/saltKey/saltIndex."
+            )
+        }
+
+        const clientVersion = typeof rawVersion === "number"
+            ? rawVersion
+            : parseInt(String(rawVersion), 10)
+
+        if (!Number.isFinite(clientVersion)) {
+            throw new Error("Invalid PhonePe clientVersion/saltIndex. It must be a number.")
+        }
+
+        return { clientId, clientSecret, clientVersion }
     }
 }
