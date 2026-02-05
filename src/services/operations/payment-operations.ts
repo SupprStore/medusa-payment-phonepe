@@ -1,7 +1,8 @@
 import { BigNumber, MathBN, PaymentSessionStatus } from "@medusajs/framework/utils"
-import { CreateSdkOrderRequest, MetaInfo, StandardCheckoutPayRequest } from "pg-sdk-node"
+import { MetaInfo } from "pg-sdk-node"
 import { PhonePeOptions } from "../../types"
 import { PhonePeClientWrapper } from "../phonepe-client-wrapper"
+import { PhonePeMapper } from "../mappers/phonepe-mapper"
 
 export class PaymentOperations {
     constructor(
@@ -24,18 +25,14 @@ export class PaymentOperations {
         }
         const redirectUrl = this.options.redirectUrl || callbackUrl
 
-        const requestBuilder = StandardCheckoutPayRequest.builder()
-            .merchantOrderId(merchantOrderId)
-            .amount(phonePeAmount)
-            .redirectUrl(redirectUrl)
-            .message("Payment for Order")
-
         const metaInfo = this.buildMetaInfo(input)
-        if (metaInfo) {
-            requestBuilder.metaInfo(metaInfo)
-        }
-
-        const payload = requestBuilder.build()
+        const payload = PhonePeMapper.buildStandardCheckoutPayRequest({
+            merchantOrderId,
+            amount: phonePeAmount,
+            redirectUrl,
+            message: "Payment for Order",
+            metaInfo,
+        })
         const response = await this.clientWrapper.pay(payload)
 
         return {
@@ -62,7 +59,7 @@ export class PaymentOperations {
             }
 
             const statusResponse = await this.clientWrapper.getOrderStatus(merchantOrderId)
-            const status = this.mapOrderStatus(statusResponse.state)
+            const status = PhonePeMapper.mapOrderStatus(statusResponse.state)
 
             return {
                 status,
@@ -93,7 +90,7 @@ export class PaymentOperations {
             }
 
             const statusResponse = await this.clientWrapper.getOrderStatus(merchantOrderId)
-            return { status: this.mapOrderStatus(statusResponse.state) }
+            return { status: PhonePeMapper.mapOrderStatus(statusResponse.state) }
         } catch (e) {
             return { status: PaymentSessionStatus.ERROR }
         }
@@ -132,18 +129,16 @@ export class PaymentOperations {
         }
 
         const redirectUrl = this.options.redirectUrl || callbackUrl
-        const builder = CreateSdkOrderRequest.StandardCheckoutBuilder()
-            .merchantOrderId(merchantOrderId)
-            .amount(phonePeAmount)
-            .redirectUrl(redirectUrl)
-            .message("Payment for Order")
-
         const metaInfo = this.buildMetaInfo(input)
-        if (metaInfo) {
-            builder.metaInfo(metaInfo)
-        }
+        const request = PhonePeMapper.buildCreateSdkOrderRequest({
+            merchantOrderId,
+            amount: phonePeAmount,
+            redirectUrl,
+            message: "Payment for Order",
+            metaInfo,
+        })
 
-        const response = await this.clientWrapper.createSdkOrder(builder.build())
+        const response = await this.clientWrapper.createSdkOrder(request)
         return {
             id: merchantOrderId,
             data: {
@@ -161,24 +156,6 @@ export class PaymentOperations {
             input?.merchantTransactionId ||
             input?.data?.merchantTransactionId
         )
-    }
-
-    private mapOrderStatus(state?: string) {
-        switch (state) {
-            case "COMPLETED":
-                return PaymentSessionStatus.AUTHORIZED
-            case "PENDING":
-                return PaymentSessionStatus.PENDING
-            case "FAILED":
-            case "DECLINED":
-            case "CANCELLED":
-            case "CANCELED":
-                return PaymentSessionStatus.CANCELED
-            case "EXPIRED":
-                return PaymentSessionStatus.ERROR
-            default:
-                return PaymentSessionStatus.ERROR
-        }
     }
 
     private buildMetaInfo(input: any) {

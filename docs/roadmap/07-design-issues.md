@@ -1,5 +1,5 @@
 # Design Pattern Issues
 
-- **Implicit behavior**: `updatePayment()` calls `initiatePayment()` without distinguishing update vs create, which may duplicate orders.
-- **Tight coupling to SDK**: Business logic and SDK request building are intertwined; harder to test/replace.
-- **Status mapping ambiguity**: Uses non-documented status value “On Progress”.
+- **Implicit behavior**: Mitigated by preventing `updatePayment()` from re-initiating when a `merchantOrderId` already exists.
+- **Tight coupling to SDK**: Mitigated by introducing a mapper layer (`PhonePeMapper`) to centralize request building and status mapping.
+- **Status mapping ambiguity**: Mitigated by removing the undocumented “On Progress” state and using a single status mapper.
