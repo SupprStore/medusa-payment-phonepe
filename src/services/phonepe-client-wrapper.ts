@@ -131,8 +131,8 @@ export class PhonePeClientWrapper {
                 this.getMedusaErrorType(error),
                 error.message
             )
-            normalized.stack = error.stack
-            ;(normalized as any).phonepe = {
+            normalized.stack = error.stack;
+            (normalized as any).phonepe = {
                 type: error.type,
                 code: error.code,
                 httpStatusCode: error.httpStatusCode,
