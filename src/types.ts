@@ -1,9 +1,10 @@
 export interface PhonePeOptions {
-    merchantId: string
-    saltKey: string
-    saltIndex: string
+    clientId: string
+    clientSecret: string
+    clientVersion: number
     redirectUrl: string
     callbackUrl?: string
-    redirectMode?: "POST" | "GET"
+    callbackUsername: string
+    callbackPassword: string
     mode: "uat" | "prod"
 }

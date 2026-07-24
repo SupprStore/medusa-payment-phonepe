@@ -1,70 +1,75 @@
 import { ProviderWebhookPayload, WebhookActionResult } from "@medusajs/types"
-import * as crypto from "crypto"
+import { CallbackType, PhonePeException } from "pg-sdk-node"
 import { PhonePeOptions } from "../../types"
+import { PhonePeClientWrapper } from "../phonepe-client-wrapper"
+import { fromPhonePeAmount } from "../utils/currency"
+
+const COMPLETED_TYPES = new Set([CallbackType.PG_ORDER_COMPLETED, CallbackType.CHECKOUT_ORDER_COMPLETED])
+const FAILED_TYPES = new Set([
+    CallbackType.PG_ORDER_FAILED,
+    CallbackType.CHECKOUT_ORDER_FAILED,
+    CallbackType.PG_TRANSACTION_ATTEMPT_FAILED,
+    CallbackType.CHECKOUT_TRANSACTION_ATTEMPT_FAILED,
+])
 
 export class WebhookValidator {
-    constructor(private options: PhonePeOptions) { }
+    constructor(
+        private clientWrapper: PhonePeClientWrapper,
+        private options: PhonePeOptions
+    ) { }
 
     async getWebhookActionAndData(payload: ProviderWebhookPayload["payload"]): Promise<WebhookActionResult> {
-        const { data, headers } = payload
+        const { rawData, headers } = payload
+        const authorization = (headers["authorization"] ?? headers["Authorization"]) as string | undefined
 
-        // 1. Verify Signature
-        const xVerify = headers["x-verify"]
-        if (!xVerify) {
+        if (!authorization) {
             return { action: "not_supported" }
         }
 
-        const { response } = data as { response: string }
+        const rawBody = typeof rawData === "string" ? rawData : rawData.toString("utf-8")
 
-        if (!response) {
-            return { action: "not_supported" }
-        }
-
-        const saltKey = this.options.saltKey
-        const saltIndex = this.options.saltIndex || "1"
-
-        // Checksum = SHA256(response + saltKey) + ### + saltIndex
-        const generatedSignature = crypto
-            .createHash("sha256")
-            .update(response + saltKey)
-            .digest("hex") + "###" + saltIndex
-
-        if (generatedSignature !== xVerify) {
-            return { action: "failed" }
-        }
-
-        // 2. Decode Payload
+        let callbackResponse
         try {
-            const buffer = Buffer.from(response, "base64")
-            const decodedBody = JSON.parse(buffer.toString("utf-8"))
-
-            const { code, data: paymentData } = decodedBody
-            const merchantTransactionId = paymentData.merchantTransactionId
-
-            if (code === "PAYMENT_SUCCESS") {
-                return {
-                    action: "authorized",
-                    data: {
-                        session_id: merchantTransactionId,
-                        amount: paymentData.amount,
-                    },
-                }
-            } else if (code === "PAYMENT_ERROR" || code === "PAYMENT_DECLINED") {
-                return {
-                    action: "failed",
-                    data: {
-                        session_id: merchantTransactionId,
-                        amount: paymentData.amount || 0,
-                    }
-                }
-            }
+            callbackResponse = this.clientWrapper.validateCallback(
+                this.options.callbackUsername,
+                this.options.callbackPassword,
+                authorization,
+                rawBody
+            )
         } catch (e) {
-            return { action: "not_supported" }
-            // Or log error, but validator usually returns result
+            if (e instanceof PhonePeException) {
+                return { action: "failed" }
+            }
+            throw e
         }
 
-        return {
-            action: "not_supported",
+        const { type, payload: data } = callbackResponse
+        const sessionId = data.merchantOrderId
+
+        if (!sessionId) {
+            return { action: "not_supported" }
         }
+
+        if (COMPLETED_TYPES.has(type)) {
+            return {
+                action: "authorized",
+                data: {
+                    session_id: sessionId,
+                    amount: fromPhonePeAmount(data.amount),
+                },
+            }
+        }
+
+        if (FAILED_TYPES.has(type)) {
+            return {
+                action: "failed",
+                data: {
+                    session_id: sessionId,
+                    amount: fromPhonePeAmount(data.amount ?? 0),
+                },
+            }
+        }
+
+        return { action: "not_supported" }
     }
 }

@@ -1,31 +1,41 @@
 import { RefundRequest } from "pg-sdk-node"
 import { PhonePeClientWrapper } from "../phonepe-client-wrapper"
+import { toPhonePeAmount } from "../utils/currency"
 
 export class RefundOperations {
     constructor(private clientWrapper: PhonePeClientWrapper) { }
 
     async refundPayment(input: any) {
-        const paymentSessionData = input.data || input
-        const refundAmount = input.amount
-        const amount = Math.round(refundAmount)
+        const paymentData = input.data || input
+        const sessionId = paymentData.session_id as string
+        const amount = toPhonePeAmount(input.amount)
 
-        const merchantTransactionId = `REF-${Date.now()}`
-        const originalTransactionId = paymentSessionData.merchantTransactionId as string
+        const merchantRefundId = `REF-${sessionId}-${Date.now()}`
 
         const refundBuilder = RefundRequest.builder()
-            .merchantRefundId(merchantTransactionId)
+            .merchantRefundId(merchantRefundId)
             .amount(amount)
-            .originalMerchantOrderId(originalTransactionId)
+            .originalMerchantOrderId(sessionId)
 
         const response = await this.clientWrapper.refund(refundBuilder.build())
 
-        if (response.state === "COMPLETED" || response.state === "SUCCESS" || response.state === "PAYMENT_SUCCESS") {
-            return {
-                ...paymentSessionData,
-                refundParams: response
-            }
-        } else {
+        // Refunds are processed asynchronously by PhonePe; only a "FAILED" state here is a
+        // hard failure. Anything else (PENDING/CONFIRMED/COMPLETED) should reconcile via
+        // getRefundStatus.
+        if (response.state === "FAILED") {
             throw new Error(`Refund state: ${response.state}`)
         }
+
+        return {
+            data: {
+                ...paymentData,
+                refundId: response.refundId,
+                refundState: response.state,
+            },
+        }
+    }
+
+    async getRefundStatus(refundId: string) {
+        return this.clientWrapper.getRefundStatus(refundId)
     }
 }

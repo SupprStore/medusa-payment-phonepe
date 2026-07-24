@@ -7,6 +7,7 @@ import {
     ProviderWebhookPayload,
     WebhookActionResult
 } from "@medusajs/types"
+import { PhonePeException } from "pg-sdk-node"
 import { PhonePeOptions } from "../types"
 import { PhonePeClientWrapper } from "./phonepe-client-wrapper"
 import { PaymentOperations } from "./operations/payment-operations"
@@ -31,15 +32,33 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
         this.clientWrapper_ = new PhonePeClientWrapper(this.options_)
         this.paymentOperations_ = new PaymentOperations(this.clientWrapper_, this.options_)
         this.refundOperations_ = new RefundOperations(this.clientWrapper_)
-        this.webhookValidator_ = new WebhookValidator(this.options_)
+        this.webhookValidator_ = new WebhookValidator(this.clientWrapper_, this.options_)
+    }
+
+    private logError(message: string, error: any): void {
+        if (error instanceof PhonePeException) {
+            this.logger_.error(
+                `${message}: ${error.message} (type=${error.type}, code=${error.code}, httpStatusCode=${error.httpStatusCode})`
+            )
+            return
+        }
+        this.logger_.error(`${message}: ${error.message}`)
     }
 
     async initiatePayment(input: any): Promise<any> {
-        const callbackUrl = this.options_.callbackUrl || `${input.context?.context?.origin || ""}/phonepe/callback`
         try {
-            return await this.paymentOperations_.initiatePayment(input, callbackUrl)
+            return await this.paymentOperations_.initiatePayment(input, this.options_.callbackUrl || "")
         } catch (error: any) {
-            this.logger_.error(`PhonePe initiation failed: ${error.message}`)
+            this.logError("PhonePe initiation failed", error)
+            throw error
+        }
+    }
+
+    async createSdkOrder(input: any): Promise<any> {
+        try {
+            return await this.paymentOperations_.createSdkOrder(input)
+        } catch (error: any) {
+            this.logError("PhonePe createSdkOrder failed", error)
             throw error
         }
     }
@@ -49,22 +68,20 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
     }
 
     async cancelPayment(input: any): Promise<any> {
-        return input
+        // PhonePe's SDK has no cancel/void endpoint; nothing to do beyond acknowledging.
+        return { data: input.data }
     }
 
     async capturePayment(input: any): Promise<any> {
-        // PhonePe 'pay' is usually auto-captured.
-        return {
-            ...input,
-            status: "captured"
-        }
+        // PhonePe 'pay' is auto-captured; no separate capture call exists.
+        return { data: input.data }
     }
 
     async refundPayment(input: any): Promise<any> {
         try {
             return await this.refundOperations_.refundPayment(input)
         } catch (error: any) {
-            this.logger_.error(`PhonePe Refund Error: ${error.message}`)
+            this.logError("PhonePe refund failed", error)
             throw error
         }
     }
@@ -74,11 +91,12 @@ export class PhonePeProvider extends AbstractPaymentProvider<PhonePeOptions> {
     }
 
     async deletePayment(input: any): Promise<any> {
-        return input
+        // PhonePe's SDK has no delete endpoint; nothing to do beyond acknowledging.
+        return { data: input.data }
     }
 
     async retrievePayment(input: any): Promise<any> {
-        return input
+        return await this.paymentOperations_.retrievePayment(input)
     }
 
     async updatePayment(input: any): Promise<any> {
