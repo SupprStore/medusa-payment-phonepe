@@ -4,6 +4,10 @@
     "description": "PhonePe payment provider module for Medusa v2",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
+    "files": [
+        "dist",
+        "!dist/**/__tests__"
+    ],
     "scripts": {
         "build": "tsc -b",
         "watch": "tsc -w",
@@ -19,13 +23,10 @@
     "author": "",
     "license": "MIT",
     "dependencies": {
-        "@medusajs/framework": "^2.12.3",
-        "@medusajs/medusa": "^2.0.0",
-        "@medusajs/utils": "^2.12.3",
-        "axios": "^1.6.0",
         "pg-sdk-node": "https://phonepe.mycloudrepo.io/public/repositories/phonepe-pg-sdk-node/releases/v2/phonepe-pg-sdk-node-2.0.3.tgz"
     },
     "devDependencies": {
+        "@medusajs/framework": "^2.12.3",
         "@medusajs/types": "^2.13.1",
         "@types/jest": "^30.0.0",
         "@types/node": "^20.0.0",
@@ -34,6 +35,6 @@
         "typescript": "^5.6.2"
     },
     "peerDependencies": {
-        "@medusajs/medusa": "^2.0.0"
+        "@medusajs/framework": "^2.12.3"
     }
 }
